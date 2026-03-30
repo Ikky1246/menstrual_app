@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:menstrual_app/screens/auth/login_screen.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
 import 'package:menstrual_app/services/auth_service.dart';
+import 'package:intl/date_symbol_data_local.dart'; 
 
-void main() {
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); 
+  await initializeDateFormatting('id', null); 
   runApp(const MyApp());
 }
 

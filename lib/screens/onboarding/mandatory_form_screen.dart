@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:menstrual_app/screens/onboarding/optional_form_screen.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 class MandatoryFormScreen extends StatefulWidget {
   const MandatoryFormScreen({super.key});
