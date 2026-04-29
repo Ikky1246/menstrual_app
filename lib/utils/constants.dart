@@ -4,34 +4,32 @@ class AppColors {
   static const Color primary = Colors.pink;
   static const Color primaryLight = Color(0xFFFFF0F6);
   static const Color primaryDark = Color(0xFFC2185B);
-  
+
   static const Color secondary = Color(0xFF9C27B0);
   static const Color accent = Color(0xFFFF4081);
-  
+
   static const Color menstruation = Colors.red;
   static const Color prediction = Color(0xFFFF80AB);
   static const Color ovulation = Color(0xFF9C27B0);
   static const Color fertile = Color(0xFF2196F3);
-  
+
   static const Color success = Color(0xFF4CAF50);
   static const Color warning = Color(0xFFFF9800);
   static const Color error = Color(0xFFF44336);
   static const Color info = Color(0xFF2196F3);
-  
+
   static const Color background = Color(0xFFFFF5F9);
   static const Color surface = Colors.white;
-  
+
   static const Color textPrimary = Color(0xFF2D2D2D);
   static const Color textSecondary = Color(0xFF757575);
   static const Color textHint = Color(0xFFBDBDBD);
 }
 
 class AppStrings {
-  // App Title
   static const String appName = 'Siklusku';
   static const String appTagline = 'Catatan Siklus Haidmu';
-  
-  // Auth
+
   static const String login = 'Masuk';
   static const String register = 'Daftar';
   static const String logout = 'Keluar';
@@ -41,8 +39,7 @@ class AppStrings {
   static const String forgotPassword = 'Lupa Kata Sandi?';
   static const String noAccount = 'Belum punya akun?';
   static const String haveAccount = 'Sudah punya akun?';
-  
-  // Onboarding
+
   static const String mandatoryData = 'Data Wajib';
   static const String optionalData = 'Data Tambahan';
   static const String lastPeriod = 'Tanggal Haid Terakhir';
@@ -52,15 +49,13 @@ class AppStrings {
   static const String stressLevel = 'Tingkat Stres';
   static const String sleepHours = 'Jam Tidur';
   static const String healthScore = 'Skor Kesehatan';
-  
-  // Dashboard
+
   static const String myCycle = 'Siklusku';
   static const String prediction = 'Prediksi';
   static const String history = 'Riwayat';
   static const String profile = 'Profil';
   static const String settings = 'Pengaturan';
-  
-  // Messages
+
   static const String welcome = 'Selamat Datang';
   static const String success = 'Berhasil!';
   static const String error = 'Terjadi Kesalahan';
@@ -112,34 +107,34 @@ class AppTextStyle {
     fontWeight: FontWeight.bold,
     color: AppColors.textPrimary,
   );
-  
+
   static const TextStyle heading2 = TextStyle(
     fontSize: AppFontSize.xxl,
     fontWeight: FontWeight.bold,
     color: AppColors.textPrimary,
   );
-  
+
   static const TextStyle heading3 = TextStyle(
     fontSize: AppFontSize.xl,
     fontWeight: FontWeight.w600,
     color: AppColors.textPrimary,
   );
-  
+
   static const TextStyle body1 = TextStyle(
     fontSize: AppFontSize.md,
     color: AppColors.textPrimary,
   );
-  
+
   static const TextStyle body2 = TextStyle(
     fontSize: AppFontSize.sm,
     color: AppColors.textSecondary,
   );
-  
+
   static const TextStyle caption = TextStyle(
     fontSize: AppFontSize.xs,
     color: AppColors.textHint,
   );
-  
+
   static const TextStyle button = TextStyle(
     fontSize: AppFontSize.md,
     fontWeight: FontWeight.bold,
@@ -148,33 +143,63 @@ class AppTextStyle {
 }
 
 class AppConstants {
-  // Cycle related
+  // ==============================================
+  // API CONFIGURATION - SESUAIKAN DENGAN IP ANDA!
+  // ==============================================
+  // Untuk emulator Android: http://10.0.2.2:8000/api
+  // Untuk device fisik: http://[IP_Komputer]:8000/api
+  static const String apiBaseUrl = 'http://localhost:8000/api';
+
+  // ==============================================
+  // AUTH ENDPOINTS
+  // ==============================================
+  static const String apiUserRegister = '/user/register';
+  static const String apiUserLogin = '/user/login';
+  static const String apiUserLogout = '/user/logout';
+  static const String apiUserProfile = '/user/profile';
+  static const String apiUserUpdate = '/user/profile';
+  // OTP Endpoints
+  static const String apiResendOtp = '/user/resend-otp';
+  static const String apiVerifyEmailOtp = '/user/verify-otp';
+
+  // ==============================================
+  // CYCLE & PREDICTION ENDPOINTS
+  // ==============================================
+  static const String apiCycle = '/cycles';
+  static const String apiCycleCreate = '/cycle';
+  static const String apiCycleUpdate = '/cycle/';
+  static const String apiPrediction = '/predictions';
+
+  // ==============================================
+  // FORGOT PASSWORD ENDPOINTS
+  // ==============================================
+  static const String apiForgotPassword = '/forgot-password';
+  static const String apiVerifyResetOtp = '/verify-otp';
+  static const String apiResetPassword = '/reset-password';
+
+  // ==============================================
+  // CYCLE CONSTANTS
+  // ==============================================
   static const int minCycleLength = 21;
   static const int maxCycleLength = 45;
   static const int minPeriodDuration = 2;
   static const int maxPeriodDuration = 10;
-  
-  // Date format
+
+  // ==============================================
+  // DATE FORMAT
+  // ==============================================
   static const String dateFormatDisplay = 'dd MMMM yyyy';
   static const String dateFormatApi = 'yyyy-MM-dd';
   static const String dateFormatMonth = 'MMMM yyyy';
-  
-  // Storage keys
+
+  // ==============================================
+  // STORAGE KEYS
+  // ==============================================
   static const String keyToken = 'auth_token';
   static const String keyUser = 'user_data';
   static const String keyCycleData = 'cycle_data';
   static const String keyTheme = 'theme_mode';
   static const String keyNotifications = 'notifications_enabled';
-  
-  // API Endpoints
-  static const String apiBaseUrl = 'http://localhost:8000/api';
-  static const String apiLogin = '/login';
-  static const String apiRegister = '/register';
-  static const String apiLogout = '/logout';
-  static const String apiUser = '/user';
-  static const String apiPredict = '/predict';
-  static const String apiCycle = '/cycle';
-  static const String apiHistory = '/history';
 }
 
 class AppValidation {

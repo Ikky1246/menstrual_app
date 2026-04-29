@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:menstrual_app/screens/auth/login_screen.dart';
+import 'package:menstrual_app/screens/auth/register_screen.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
+import 'package:menstrual_app/screens/onboarding/mandatory_form_screen.dart';
+import 'package:menstrual_app/screens/onboarding/optional_form_screen.dart';
+import 'package:menstrual_app/screens/auth/forgot_password_screen.dart';
+import 'package:menstrual_app/screens/auth/verify_email_screen.dart';
+import 'package:menstrual_app/screens/auth/verify_otp_screen.dart';
+import 'package:menstrual_app/screens/auth/reset_password_screen.dart';
+import 'package:menstrual_app/screens/prediction_screen.dart';
 import 'package:menstrual_app/services/auth_service.dart';
-import 'package:intl/date_symbol_data_local.dart'; 
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); 
-  await initializeDateFormatting('id', null); 
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('id', null);
   runApp(const MyApp());
 }
 
@@ -29,7 +37,54 @@ class MyApp extends StatelessWidget {
         ),
       ),
       debugShowCheckedModeBanner: false,
-      home: const SplashScreen(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const SplashScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/dashboard': (context) => const DashboardScreen(),
+        '/mandatory': (context) => const MandatoryFormScreen(),
+        // HAPUS '/optional' dari sini karena butuh parameter
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/prediction': (context) => const PredictionScreen(),
+      },
+      onGenerateRoute: (settings) {
+        // Untuk halaman dengan parameter
+        if (settings.name == '/verify-email') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (context) => VerifyEmailScreen(
+              email: args['email'],
+              verificationToken: args['verification_token'],
+            ),
+          );
+        }
+        if (settings.name == '/verify-otp') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (context) => VerifyOtpScreen(
+              email: args['email'],
+              resetToken: args['reset_token'],
+            ),
+          );
+        }
+        if (settings.name == '/reset-password') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (context) => ResetPasswordScreen(
+              email: args['email'],
+              resetToken: args['reset_token'],
+            ),
+          );
+        }
+        // OptionalFormScreen tidak pakai named route, langsung MaterialPageRoute
+        return null;
+      },
+      onUnknownRoute: (settings) {
+        return MaterialPageRoute(
+          builder: (context) => const LoginScreen(),
+        );
+      },
     );
   }
 }
@@ -49,25 +104,33 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkLoginStatus() async {
-    await Future.delayed(const Duration(seconds: 2)); // Splash delay
-    
+    await Future.delayed(const Duration(seconds: 2));
+
     final isLoggedIn = await AuthService.isLoggedIn();
-    
+
     if (mounted) {
       if (isLoggedIn) {
-        // Cek apakah user sudah punya data siklus
-        // Jika belum, arahkan ke onboarding
-        // Jika sudah, arahkan ke dashboard
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
-        );
+        final user = await AuthService.getCurrentUser();
+        final hasCycleData = await _hasCycleData();
+
+        if (hasCycleData) {
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        } else {
+          Navigator.pushReplacementNamed(context, '/mandatory');
+        }
       } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-        );
+        Navigator.pushReplacementNamed(context, '/login');
       }
+    }
+  }
+
+  Future<bool> _hasCycleData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasCycle = prefs.getBool('has_cycle_data') ?? false;
+      return hasCycle;
+    } catch (e) {
+      return false;
     }
   }
 

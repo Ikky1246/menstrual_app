@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import '../services/cycle_service.dart';
 
 class PredictionScreen extends StatefulWidget {
   const PredictionScreen({super.key});
@@ -10,46 +12,23 @@ class PredictionScreen extends StatefulWidget {
 }
 
 class _PredictionScreenState extends State<PredictionScreen> {
-  // Controllers
   final _cycleController = TextEditingController();
   final _stressController = TextEditingController();
   final _sleepController = TextEditingController();
-  final _healthController = TextEditingController();
   final _dateController = TextEditingController();
 
-  // State variables
   String _result = "";
   bool _isLoading = false;
   DateTime? _selectedDate;
   
-  // Data historis (dummy, nanti dari API/SharedPreferences)
-  final List<Map<String, dynamic>> _recentPredictions = [
-    {
-      'date': '2026-03-06',
-      'cycle': 28,
-      'next': '2026-04-03',
-      'accuracy': 'Tepat',
-    },
-    {
-      'date': '2026-02-06',
-      'cycle': 29,
-      'next': '2026-03-07',
-      'accuracy': '+1 hari',
-    },
-    {
-      'date': '2026-01-05',
-      'cycle': 27,
-      'next': '2026-02-01',
-      'accuracy': '-1 hari',
-    },
-  ];
+  List<Map<String, dynamic>> _recentPredictions = [];
 
   @override
   void initState() {
     super.initState();
-    // Set default date ke hari ini
     _selectedDate = DateTime.now();
     _dateController.text = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+    _loadLatestCycleData();
   }
 
   @override
@@ -57,9 +36,34 @@ class _PredictionScreenState extends State<PredictionScreen> {
     _cycleController.dispose();
     _stressController.dispose();
     _sleepController.dispose();
-    _healthController.dispose();
     _dateController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadLatestCycleData() async {
+    try {
+      final result = await CycleService.getLatestCycle();
+      if (result['success'] == true && result['cycle'] != null) {
+        final cycle = result['cycle'];
+        setState(() {
+          if (cycle.cycleLengthDays != null) {
+            _cycleController.text = cycle.cycleLengthDays.toString();
+          }
+          if (cycle.stressScoreCycle != null) {
+            _stressController.text = cycle.stressScoreCycle.toString();
+          }
+          if (cycle.sleepHoursCycle != null) {
+            _sleepController.text = cycle.sleepHoursCycle.toString();
+          }
+          if (cycle.lastPeriodDate.isNotEmpty) {
+            _dateController.text = cycle.lastPeriodDate;
+            _selectedDate = DateTime.tryParse(cycle.lastPeriodDate);
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading cycle data: $e');
+    }
   }
 
   Future<void> _selectDate() async {
@@ -96,20 +100,16 @@ class _PredictionScreenState extends State<PredictionScreen> {
   }
 
   void _predict() async {
-    // Validasi input
     if (_cycleController.text.isEmpty ||
         _stressController.text.isEmpty ||
-        _sleepController.text.isEmpty ||
-        _healthController.text.isEmpty) {
+        _sleepController.text.isEmpty) {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Semua field harus diisi!'),
+          content: const Text('Panjang siklus, tingkat stres, dan jam tidur wajib diisi!'),
           backgroundColor: Colors.orange.shade700,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
@@ -122,32 +122,35 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
     try {
       final data = await ApiService.predictCycle(
-        cycleLength: int.parse(_cycleController.text),
-        stress: int.parse(_stressController.text),
-        sleep: int.parse(_sleepController.text),
-        health: int.parse(_healthController.text),
+        cycleLengthDays: int.parse(_cycleController.text),
+        stressScoreCycle: int.parse(_stressController.text),
+        sleepHoursCycle: double.parse(_sleepController.text),
         startDate: _dateController.text,
       );
 
-      setState(() {
-        _result = 
-            "Siklus: ${data['predicted_cycle_length']} hari\n"
-            "Tanggal berikutnya: ${data['next_period_date']}";
-        _isLoading = false;
-      });
+      if (data['success'] == true) {
+        final resultData = data['data'];
+        setState(() {
+          _result = 
+              "📊 Siklus: ${resultData['predicted_cycle_length']} hari\n"
+              "📅 Tanggal berikutnya: ${resultData['next_period_date']}";
+          _isLoading = false;
+        });
 
-      // Tampilkan sukses
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Prediksi berhasil! 🎉'),
-          backgroundColor: Colors.green.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Prediksi berhasil! 🎉'),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-        ),
-      );
-
+        );
+      } else {
+        setState(() {
+          _result = "Error: ${data['message']}";
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _result = "Error: Gagal terhubung ke server";
@@ -159,9 +162,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
           content: Text('Gagal: $e'),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -172,7 +173,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
       _cycleController.text = '28';
       _stressController.text = '5';
       _sleepController.text = '7';
-      _healthController.text = '8';
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
@@ -189,7 +189,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
       _cycleController.clear();
       _stressController.clear();
       _sleepController.clear();
-      _healthController.clear();
       _result = "";
     });
   }
@@ -205,17 +204,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () {
-              _showHistoryDialog();
-            },
-            tooltip: 'Riwayat Prediksi',
-          ),
-          IconButton(
             icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              _showInfoDialog();
-            },
+            onPressed: _showInfoDialog,
             tooltip: 'Informasi',
           ),
         ],
@@ -223,7 +213,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header dengan ilustrasi
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -235,7 +224,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.pink.withOpacity(0.3),
+                    color: Colors.pink.withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -246,7 +235,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   Container(
                     padding: const EdgeInsets.all(15),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -267,9 +256,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   const SizedBox(height: 5),
                   const Text(
                     'Masukkan data untuk mendapatkan prediksi',
-                    style: TextStyle(
-                      color: Colors.white70,
-                    ),
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
@@ -277,7 +264,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
             const SizedBox(height: 20),
 
-            // Form Card
             Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(20),
@@ -286,7 +272,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withValues(alpha: 0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -297,29 +283,24 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 children: [
                   const Text(
                     '📊 Data Siklus',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 20),
 
-                  // Cycle Length
                   _buildInputField(
                     controller: _cycleController,
-                    label: 'Cycle Length',
-                    hint: 'Panjang siklus (hari)',
+                    label: 'Panjang Siklus',
+                    hint: 'Contoh: 28',
                     icon: Icons.timeline,
-                    tooltip: 'Rata-rata panjang siklus haid kamu',
+                    tooltip: 'Rata-rata panjang siklus haid kamu (21-45 hari)',
                     unit: 'hari',
                   ),
 
                   const SizedBox(height: 15),
 
-                  // Stress Level
                   _buildInputField(
                     controller: _stressController,
-                    label: 'Stress Level',
+                    label: 'Tingkat Stres',
                     hint: '1-10',
                     icon: Icons.bolt,
                     tooltip: 'Tingkat stres (1 = rendah, 10 = tinggi)',
@@ -328,11 +309,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
                   const SizedBox(height: 15),
 
-                  // Sleep Hours
                   _buildInputField(
                     controller: _sleepController,
-                    label: 'Sleep Hours',
-                    hint: 'Jam tidur',
+                    label: 'Jam Tidur',
+                    hint: 'Contoh: 7',
                     icon: Icons.nightlight_round,
                     tooltip: 'Rata-rata jam tidur per hari',
                     unit: 'jam',
@@ -340,19 +320,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
                   const SizedBox(height: 15),
 
-                  // Health Score
-                  _buildInputField(
-                    controller: _healthController,
-                    label: 'Health Score',
-                    hint: '1-10',
-                    icon: Icons.favorite,
-                    tooltip: 'Skor kesehatan umum',
-                    unit: 'skala',
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  // Last Period Date
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade200),
@@ -369,7 +336,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
                   const SizedBox(height: 25),
 
-                  // Action Buttons
                   Row(
                     children: [
                       Expanded(
@@ -394,10 +360,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                                 )
                               : const Text(
                                   'Prediksi Sekarang',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                 ),
                         ),
                       ),
@@ -406,7 +369,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
                   const SizedBox(height: 10),
 
-                  // Helper buttons
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -432,22 +394,18 @@ class _PredictionScreenState extends State<PredictionScreen> {
               ),
             ),
 
-            // Result Card
             if (_result.isNotEmpty)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Colors.pink.shade400,
-                      Colors.pink.shade600,
-                    ],
+                    colors: [Colors.pink.shade400, Colors.pink.shade600],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.pink.withOpacity(0.3),
+                      color: Colors.pink.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -467,7 +425,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     Container(
                       padding: const EdgeInsets.all(15),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(15),
                       ),
                       child: Column(
@@ -477,7 +435,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                             child: Row(
                               children: [
                                 Icon(
-                                  line.startsWith('Siklus') 
+                                  line.startsWith('📊') 
                                       ? Icons.timeline 
                                       : Icons.calendar_today,
                                   color: Colors.white,
@@ -487,10 +445,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                                 Expanded(
                                   child: Text(
                                     line,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                    ),
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ),
                               ],
@@ -503,18 +458,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
-                          Icons.info_outline,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
+                        const Icon(Icons.info_outline, color: Colors.white70, size: 16),
                         const SizedBox(width: 5),
                         Text(
                           'Prediksi berdasarkan data yang dimasukkan',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.8),
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
                         ),
                       ],
                     ),
@@ -524,7 +472,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
             const SizedBox(height: 20),
 
-            // Tips Section
             Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
@@ -542,26 +489,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
                       const SizedBox(width: 8),
                       const Text(
                         'Tips untuk Prediksi Akurat',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  _buildTipItem(
-                    'Catat siklus minimal 3 bulan untuk prediksi lebih akurat',
-                  ),
-                  _buildTipItem(
-                    'Semakin lengkap data (stres, tidur, kesehatan) semakin baik',
-                  ),
-                  _buildTipItem(
-                    'Gunakan tanggal haid terakhir yang valid',
-                  ),
-                  _buildTipItem(
-                    'Konsisten dalam mencatat gejala dan mood',
-                  ),
+                  _buildTipItem('Catat siklus minimal 3 bulan untuk prediksi lebih akurat'),
+                  _buildTipItem('Semakin lengkap data (stres, tidur) semakin baik'),
+                  _buildTipItem('Gunakan tanggal haid terakhir yang valid'),
+                  _buildTipItem('Konsisten dalam mencatat gejala dan mood'),
                 ],
               ),
             ),
@@ -586,20 +522,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
           children: [
             Icon(icon, color: Colors.pink.shade300, size: 20),
             const SizedBox(width: 5),
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
             const SizedBox(width: 5),
             Tooltip(
               message: tooltip,
-              child: Icon(
-                Icons.info_outline,
-                size: 16,
-                color: Colors.grey.shade400,
-              ),
+              child: Icon(Icons.info_outline, size: 16, color: Colors.grey.shade400),
             ),
           ],
         ),
@@ -611,10 +538,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
             hintText: hint,
             suffixText: unit,
             suffixStyle: TextStyle(color: Colors.grey.shade600),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(15),
               borderSide: BorderSide(color: Colors.grey.shade300),
@@ -639,103 +563,9 @@ class _PredictionScreenState extends State<PredictionScreen> {
         children: [
           const Text('• ', style: TextStyle(fontSize: 16)),
           Expanded(
-            child: Text(
-              tip,
-              style: TextStyle(
-                color: Colors.grey.shade700,
-                fontSize: 13,
-              ),
-            ),
+            child: Text(tip, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showHistoryDialog() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Center(
-              child: Text(
-                'Riwayat Prediksi',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ..._recentPredictions.map((pred) => Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Haid: ${pred['date']}',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Siklus ${pred['cycle']} hari → ${pred['next']}',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: pred['accuracy'] == 'Tepat'
-                          ? Colors.green.shade100
-                          : Colors.orange.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      pred['accuracy'],
-                      style: TextStyle(
-                        color: pred['accuracy'] == 'Tepat'
-                            ? Colors.green.shade700
-                            : Colors.orange.shade700,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )),
-            const SizedBox(height: 10),
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Tutup'),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -757,7 +587,6 @@ class _PredictionScreenState extends State<PredictionScreen> {
             _buildInfoBullet('Panjang siklus rata-rata'),
             _buildInfoBullet('Tingkat stres (mempengaruhi hormon)'),
             _buildInfoBullet('Pola tidur (mempengaruhi siklus)'),
-            _buildInfoBullet('Skor kesehatan umum'),
             _buildInfoBullet('Tanggal haid terakhir'),
             const SizedBox(height: 15),
             Container(
@@ -768,10 +597,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
               ),
               child: const Text(
                 'Semakin lengkap data yang dimasukkan, semakin akurat hasil prediksi.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.pink,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.pink),
                 textAlign: TextAlign.center,
               ),
             ),
