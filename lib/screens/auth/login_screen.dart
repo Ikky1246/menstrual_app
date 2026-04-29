@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:menstrual_app/screens/auth/register_screen.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
-import 'package:menstrual_app/screens/onboarding/mandatory_form_screen.dart';
+import 'package:menstrual_app/screens/auth/forgot_password_screen.dart';
 import 'package:menstrual_app/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -15,7 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isPasswordVisible = false;
   bool _isLoading = false;
   bool _rememberMe = false;
@@ -48,13 +48,13 @@ class _LoginScreenState extends State<LoginScreen> {
           // Cek apakah user sudah punya data siklus
           // Jika belum, arahkan ke onboarding
           // Jika sudah, arahkan ke dashboard
-          
+
           // Sementara langsung ke dashboard dulu
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const DashboardScreen()),
           );
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result['message'] ?? 'Login berhasil! 💕'),
@@ -87,11 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.pink.shade50,
-              Colors.white,
-              Colors.pink.shade50,
-            ],
+            colors: [Colors.pink.shade50, Colors.white, Colors.pink.shade50],
           ),
         ),
         child: SafeArea(
@@ -102,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 40),
-                  
+
                   // Header dengan ilustrasi
                   Center(
                     child: Container(
@@ -119,9 +115,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 30),
-                  
+
                   // Judul
                   const Text(
                     'Selamat Datang\nKembali!',
@@ -132,19 +128,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       height: 1.2,
                     ),
                   ),
-                  
+
                   const SizedBox(height: 10),
-                  
+
                   Text(
                     'Senang melihatmu lagi. Yuk lanjutkan catatan siklusmu!',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
-                  
+
                   const SizedBox(height: 40),
-                  
+
                   // Form
                   Form(
                     key: _formKey,
@@ -157,7 +150,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Email',
                             hintText: 'masukkan email kamu',
-                            prefixIcon: Icon(Icons.email_outlined, color: Colors.pink.shade300),
+                            prefixIcon: Icon(
+                              Icons.email_outlined,
+                              color: Colors.pink.shade300,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(15),
                               borderSide: BorderSide.none,
@@ -166,22 +162,27 @@ class _LoginScreenState extends State<LoginScreen> {
                             fillColor: Colors.pink.shade50,
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(15),
-                              borderSide: BorderSide(color: Colors.pink.shade300, width: 2),
+                              borderSide: BorderSide(
+                                color: Colors.pink.shade300,
+                                width: 2,
+                              ),
                             ),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Email tidak boleh kosong';
                             }
-                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                            if (!RegExp(
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                            ).hasMatch(value)) {
                               return 'Format email tidak valid';
                             }
                             return null;
                           },
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Password Field
                         TextFormField(
                           controller: _passwordController,
@@ -189,10 +190,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Password',
                             hintText: 'masukkan password',
-                            prefixIcon: Icon(Icons.lock_outline, color: Colors.pink.shade300),
+                            prefixIcon: Icon(
+                              Icons.lock_outline,
+                              color: Colors.pink.shade300,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                                _isPasswordVisible
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
                                 color: Colors.pink.shade300,
                               ),
                               onPressed: () {
@@ -209,7 +215,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             fillColor: Colors.pink.shade50,
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(15),
-                              borderSide: BorderSide(color: Colors.pink.shade300, width: 2),
+                              borderSide: BorderSide(
+                                color: Colors.pink.shade300,
+                                width: 2,
+                              ),
                             ),
                           ),
                           validator: (value) {
@@ -222,9 +231,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             return null;
                           },
                         ),
-                        
+
                         const SizedBox(height: 10),
-                        
+
                         // Remember me & Forgot password
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -246,9 +255,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                 const Text('Ingat saya'),
                               ],
                             ),
+                            // Forgot password link
                             TextButton(
                               onPressed: () {
-                                // TODO: Implementasi lupa password
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const ForgotPasswordScreen(),
+                                  ),
+                                );
                               },
                               child: Text(
                                 'Lupa password?',
@@ -257,9 +273,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 20),
-                        
+
                         // Login Button
                         SizedBox(
                           width: double.infinity,
@@ -295,9 +311,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 30),
-                  
+
                   // Register link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,

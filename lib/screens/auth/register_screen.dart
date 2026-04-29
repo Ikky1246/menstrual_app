@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:menstrual_app/screens/auth/login_screen.dart';
-import 'package:menstrual_app/screens/onboarding/mandatory_form_screen.dart';
+import 'package:menstrual_app/screens/auth/verify_email_screen.dart';
 import 'package:menstrual_app/services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -32,77 +32,81 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _register() async {
-  if (_formKey.currentState!.validate()) {
-    if (!_agreeTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Harap setujui syarat dan ketentuan'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      print('📝 Mencoba register dengan:');
-      print('Name: ${_nameController.text}');
-      print('Email: ${_emailController.text}');
-      print('Password: ${_passwordController.text}');
-      
-      final result = await AuthService.register(
-        name: _nameController.text.trim(),
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      print('📥 Response dari server: $result'); // LIHAT INI
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-
-        if (result['success']) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const MandatoryFormScreen(),
-            ),
-          );
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? 'Registrasi berhasil! 💕'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          // Tampilkan error
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
+    if (_formKey.currentState!.validate()) {
+      if (!_agreeTerms) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Harap setujui syarat dan ketentuan'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
       }
-    } catch (e) {
-      print('🔥 Error: $e');
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        print('📝 Mencoba register dengan:');
+        print('Name: ${_nameController.text}');
+        print('Email: ${_emailController.text}');
+        print('Password: ${_passwordController.text}');
+        
+        final result = await AuthService.register(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+
+        print('📥 Response dari server: $result');
+
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+
+          if (result['success']) {
+            // Navigasi ke halaman verifikasi OTP
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => VerifyEmailScreen(
+                  email: _emailController.text.trim(),
+                  verificationToken: result['verification_token'],
+                ),
+              ),
+            );
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result['message'] ?? 'Registrasi berhasil! Silakan verifikasi email Anda. 💕'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } else {
+            // Tampilkan error
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result['message']),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        print('🔥 Error: $e');
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
