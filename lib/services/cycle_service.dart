@@ -4,10 +4,67 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cycle_model.dart';
 import '../utils/constants.dart';
 import 'auth_service.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:math' as math;
 
 class CycleService {
+  static void _log(String message) {
+    if (kDebugMode) {
+      print(message);
+    }
+  }
+
   // ==============================================
-  // SAVE MANDATORY CYCLE DATA (Wajib dari onboarding)
+  // GET TOKEN DENGAN VALIDASI
+  // ==============================================
+  static Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Coba ambil dari AppConstants.keyToken
+    String? token = prefs.getString(AppConstants.keyToken);
+    
+    // Jika tidak ada, coba dari key lain
+    if (token == null) {
+      token = prefs.getString('token');
+    }
+    
+    if (token == null) {
+      token = prefs.getString('auth_token');
+    }
+    
+    if (kDebugMode) {
+      print('🔑 Token status: ${token != null ? "Ada (${token.substring(0, math.min(20, token.length))}...)" : "TIDAK ADA"}');
+    }
+    
+    return token;
+  }
+
+  // ==============================================
+  // REFRESH/RELOGIN (jika token expired)
+  // ==============================================
+  static Future<bool> _refreshToken() async {
+    _log('🔄 Mencoba refresh token...');
+    
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString('user_email');
+    final password = prefs.getString('user_password');
+    
+    if (email != null && password != null) {
+      _log('🔄 Mencoba login ulang dengan email: $email');
+      final result = await AuthService.login(email: email, password: password);
+      
+      if (result['success'] == true) {
+        _log('✅ Refresh token berhasil!');
+        return true;
+      }
+    }
+    
+    _log('❌ Refresh token gagal!');
+    return false;
+  }
+
+  // ==============================================
+  // SAVE MANDATORY CYCLE DATA
   // ==============================================
   static Future<Map<String, dynamic>> saveMandatoryData({
     required int idUser,
@@ -15,18 +72,20 @@ class CycleService {
     String? previousPeriodDate,
     required int cycleLengthDays,
     required int periodDurationDays,
+    required int painLevel,
+    required int stressLevel,
+    required double sleepHours,
+    required int moodLevel,
   }) async {
     try {
-      final token = await _getToken();
+      String? token = await _getToken();
       if (token == null) {
-        return {'success': false, 'message': 'Token tidak ditemukan'};
+        return {'success': false, 'message': 'Token tidak ditemukan. Silakan login kembali.'};
       }
 
-      print('📤 Saving mandatory cycle data...');
-      print('   id_user: $idUser');
-      print('   last_period_date: $lastPeriodDate');
-      print('   cycle_length_days: $cycleLengthDays');
-      print('   period_duration_days: $periodDurationDays');
+      _log('📤 Saving mandatory cycle data...');
+      _log('   id_user: $idUser');
+      _log('   last_period_date: $lastPeriodDate');
 
       final response = await http.post(
         Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiCycleCreate}'),
@@ -41,14 +100,42 @@ class CycleService {
           'previous_period_date': previousPeriodDate,
           'cycle_length_days': cycleLengthDays,
           'period_duration_days': periodDurationDays,
+          'pain_level': painLevel,
+          'stress_score_cycle': stressLevel,
+          'sleep_hours_cycle': sleepHours,
+          'mood_score': moodLevel,
         }),
       ).timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      print('📊 Response: ${response.statusCode} - $data');
+      _log('📊 Response: ${response.statusCode}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return {'success': true, 'data': data, 'cycleId': data['_id'] ?? data['id']};
+        return {
+          'success': true,
+          'data': data,
+          'cycleId': data['_id'] ?? data['id'] ?? data['data']?['_id']
+        };
+      } else if (response.statusCode == 401) {
+        // Token expired, coba refresh
+        _log('⚠️ Token expired, mencoba refresh...');
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          // Retry dengan token baru
+          return await saveMandatoryData(
+            idUser: idUser,
+            lastPeriodDate: lastPeriodDate,
+            previousPeriodDate: previousPeriodDate,
+            cycleLengthDays: cycleLengthDays,
+            periodDurationDays: periodDurationDays,
+            painLevel: painLevel,
+            stressLevel: stressLevel,
+            sleepHours: sleepHours,
+            moodLevel: moodLevel,
+          );
+        } else {
+          return {'success': false, 'message': 'Sesi habis, silakan login kembali'};
+        }
       } else {
         return {
           'success': false,
@@ -56,43 +143,62 @@ class CycleService {
         };
       }
     } catch (e) {
-      print('❌ Error saving cycle data: $e');
+      _log('❌ Error saving cycle data: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
   }
 
   // ==============================================
-  // UPDATE WITH OPTIONAL DATA (Opsional dari onboarding)
+  // UPDATE WITH OPTIONAL DATA
   // ==============================================
-  static Future<Map<String, dynamic>> updateOptionalData({
+static Future<Map<String, dynamic>> updateOptionalData({
   required String cycleId,
-  int? stressScoreCycle,
-  double? sleepHoursCycle,
+  required int painLevel,
+  required int stressScoreCycle,
+  required double sleepHoursCycle,
+  required int moodLevel,
+  double? weight,
+  double? height,
   List<String>? symptoms,
   String? notes,
 }) async {
   try {
-    final token = await AuthService.getToken();
-    
-    print('📤 Updating optional data - Token: ${token != null ? "Ada" : "TIDAK ADA"}');
-    print('📤 Cycle ID: $cycleId');
-    
-    if (token == null) {
-      return {'success': false, 'message': 'Token tidak ditemukan. Silakan login ulang.'};
+    final token = await _getToken();
+
+    if (token == null || token.isEmpty) {
+      return {
+        'success': false,
+        'message': 'Token tidak ditemukan'
+      };
     }
 
-    final Map<String, dynamic> data = {};
-    if (stressScoreCycle != null) data['stress_score_cycle'] = stressScoreCycle;
-    if (sleepHoursCycle != null) data['sleep_hours_cycle'] = sleepHoursCycle;
-    if (symptoms != null && symptoms.isNotEmpty) data['symptoms'] = symptoms;
-    if (notes != null && notes.isNotEmpty) data['notes'] = notes;
+    // ✅ CEK APAKAH CYCLE ID MILIK USER INI
+    final Map<String, dynamic> data = {
+      'pain_level': painLevel,
+      'stress_score_cycle': stressScoreCycle,
+      'sleep_hours_cycle': sleepHoursCycle,
+      'mood_score': moodLevel,
+    };
 
-    print('📤 Request body: $data');
+    if (weight != null) data['weight_kg'] = weight;
+    if (height != null) data['height_cm'] = height;
+    if (symptoms != null && symptoms.isNotEmpty) {
+      data['symptoms'] = symptoms;
+    }
+    if (notes != null && notes.isNotEmpty) {
+      data['notes'] = notes;
+    }
 
-    final url = Uri.parse('${AppConstants.apiBaseUrl}/cycle/$cycleId');
+    final url = Uri.parse(
+      '${AppConstants.apiBaseUrl}${AppConstants.apiCycleUpdate}$cycleId',
+    );
+
     print('📤 URL: $url');
+    print('📤 METHOD: PUT'); // ✅ GANTI ke PUT jika backend pakai PUT
+    print('📤 TOKEN: Bearer $token');
+    print('📤 BODY: ${jsonEncode(data)}');
 
-    final response = await http.put(
+    final response = await http.put(  // ✅ atau .patch tergantung backend
       url,
       headers: {
         "Content-Type": "application/json",
@@ -102,27 +208,69 @@ class CycleService {
       body: jsonEncode(data),
     ).timeout(AppDurations.apiTimeout);
 
-    print('📊 Update optional response status: ${response.statusCode}');
-    print('📊 Response body: ${response.body}');
+    print('📊 STATUS: ${response.statusCode}');
+    print('📊 RESPONSE: ${response.body}');
 
-    final responseData = jsonDecode(response.body);
+    // ✅ HANDLE KHUSUS 403
+    if (response.statusCode == 403) {
+      Map<String, dynamic> errorData = {};
+      try {
+        errorData = jsonDecode(response.body);
+      } catch (_) {}
+      
+      // Cek apakah perlu verifikasi email
+      if (errorData['message']?.contains('verifikasi') == true) {
+        return {
+          'success': false,
+          'message': 'Silakan verifikasi email Anda terlebih dahulu',
+          'need_verification': true,
+        };
+      }
+      
+      // Cek apakah perlu refresh token
+      final refreshed = await _refreshToken();
+      if (refreshed) {
+        return await updateOptionalData(
+          cycleId: cycleId,
+          painLevel: painLevel,
+          stressScoreCycle: stressScoreCycle,
+          sleepHoursCycle: sleepHoursCycle,
+          moodLevel: moodLevel,
+          weight: weight,
+          height: height,
+          symptoms: symptoms,
+          notes: notes,
+        );
+      }
+    }
+
+    Map<String, dynamic> responseData = {};
+    try {
+      responseData = jsonDecode(response.body);
+    } catch (_) {}
 
     if (response.statusCode == 200) {
-      return {'success': true, 'data': responseData};
-    } else {
       return {
-        'success': false,
-        'message': responseData['message'] ?? 'Gagal update data'
+        'success': true,
+        'data': responseData,
       };
     }
+
+    return {
+      'success': false,
+      'message': responseData['message'] ?? 'Gagal update cycle',
+    };
   } catch (e) {
-    print('❌ Error updating optional data: $e');
-    return {'success': false, 'message': 'Error: $e'};
+    print('❌ ERROR UPDATE CYCLE: $e');
+    return {
+      'success': false,
+      'message': 'Error: $e',
+    };
   }
 }
 
   // ==============================================
-  // GET ALL CYCLES (Riwayat)
+  // GET ALL CYCLES
   // ==============================================
   static Future<Map<String, dynamic>> getAllCycles() async {
     try {
@@ -140,19 +288,24 @@ class CycleService {
       ).timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      print('📊 Get cycles response: ${response.statusCode}');
+      _log('📊 Get cycles response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         List<CycleData> cycles = [];
+        
+        final List<dynamic> cyclesData;
         if (data['data'] != null && data['data'] is List) {
-          cycles = (data['data'] as List)
-              .map((item) => CycleData.fromJson(item))
-              .toList();
+          cyclesData = data['data'] as List<dynamic>;
         } else if (data is List) {
-          cycles = (data as List)
-              .map((item) => CycleData.fromJson(item))
-              .toList();
+          cyclesData = data as List<dynamic>;
+        } else {
+          cyclesData = [];
         }
+        
+        cycles = cyclesData
+            .map((item) => CycleData.fromJson(item as Map<String, dynamic>))
+            .toList();
+            
         return {'success': true, 'cycles': cycles};
       } else {
         return {
@@ -162,7 +315,7 @@ class CycleService {
         };
       }
     } catch (e) {
-      print('❌ Error getting cycles: $e');
+      _log('❌ Error getting cycles: $e');
       return {'success': false, 'message': 'Error: $e', 'cycles': []};
     }
   }
@@ -186,13 +339,13 @@ class CycleService {
       ).timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      print('📊 Get latest cycle response: ${response.statusCode}');
+      _log('📊 Get latest cycle response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         CycleData? cycle;
         if (data['data'] != null) {
-          cycle = CycleData.fromJson(data['data']);
-        } else if (data) {
+          cycle = CycleData.fromJson(data['data'] as Map<String, dynamic>);
+        } else if (data is Map<String, dynamic>) {
           cycle = CycleData.fromJson(data);
         }
         return {'success': true, 'cycle': cycle};
@@ -200,16 +353,8 @@ class CycleService {
         return {'success': false, 'message': data['message'] ?? 'Tidak ada data'};
       }
     } catch (e) {
-      print('❌ Error getting latest cycle: $e');
+      _log('❌ Error getting latest cycle: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
-  }
-
-  // ==============================================
-  // PRIVATE: GET TOKEN
-  // ==============================================
-  static Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(AppConstants.keyToken);
   }
 }

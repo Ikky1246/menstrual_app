@@ -5,6 +5,7 @@ import 'package:menstrual_app/screens/auth/login_screen.dart';
 import 'package:menstrual_app/services/auth_service.dart';
 import 'package:menstrual_app/services/cycle_service.dart';
 import 'package:menstrual_app/models/user_model.dart';
+import 'package:menstrual_app/utils/constants.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,9 +29,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'lastPeriod': '-',
     'nextPeriod': '-',
     'ovulationDate': '-',
-    'fertilityWindow': '-',
+    'fertilityWindowStart': '-',
+    'fertilityWindowEnd': '-',
     'daysUntilNext': 0,
   };
+  
+  // Data untuk kalender
+  List<DateTime> _menstruationDates = [];
+  List<DateTime> _predictionDates = [];
+  List<DateTime> _ovulationDates = [];
+  DateTime? _nextPeriodDate;
+  int _cycleLength = 28;
 
   @override
   void initState() {
@@ -53,33 +62,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (result['success'] == true && result['cycle'] != null) {
         final cycle = result['cycle'];
         
-        // Format tanggal
-        String lastPeriod = cycle.lastPeriodDate.isNotEmpty 
-            ? DateFormat('dd MMMM yyyy', 'id').format(DateTime.parse(cycle.lastPeriodDate))
-            : '-';
+        // Ambil data dari cycle
+        _cycleLength = cycle.cycleLengthDays ?? 28;
+        final lastPeriodDate = cycle.lastPeriodDate != null 
+            ? DateTime.parse(cycle.lastPeriodDate) 
+            : null;
         
-        // Hitung prediksi sederhana
-        int cycleLength = cycle.cycleLengthDays ?? 28;
-        DateTime nextPeriodDate = DateTime.now().add(Duration(days: cycleLength));
-        int daysUntilNext = nextPeriodDate.difference(DateTime.now()).inDays;
-        
-        // Hitung ovulasi (14 hari sebelum haid berikutnya)
-        DateTime ovulationDate = nextPeriodDate.subtract(const Duration(days: 14));
-        
-        setState(() {
-          _summaryData = {
-            'avgCycleLength': cycleLength,
-            'lastPeriod': lastPeriod,
-            'nextPeriod': DateFormat('dd MMMM yyyy', 'id').format(nextPeriodDate),
-            'ovulationDate': DateFormat('dd MMMM yyyy', 'id').format(ovulationDate),
-            'fertilityWindow': '${DateFormat('dd MMM', 'id').format(ovulationDate.subtract(const Duration(days: 5)))} - ${DateFormat('dd MMM', 'id').format(ovulationDate)}',
-            'daysUntilNext': daysUntilNext,
-          };
-        });
+        // Hitung tanggal haid berikutnya
+        if (lastPeriodDate != null) {
+          _nextPeriodDate = lastPeriodDate.add(Duration(days: _cycleLength));
+          
+          // Hitung tanggal ovulasi (14 hari sebelum haid berikutnya)
+          final ovulationDate = _nextPeriodDate!.subtract(const Duration(days: 14));
+          
+          // Format tanggal
+          String lastPeriodFormatted = lastPeriodDate != null
+              ? DateFormat('dd MMMM yyyy', 'id').format(lastPeriodDate)
+              : '-';
+          
+          String nextPeriodFormatted = _nextPeriodDate != null
+              ? DateFormat('dd MMMM yyyy', 'id').format(_nextPeriodDate!)
+              : '-';
+          
+          String ovulationFormatted = ovulationDate != null
+              ? DateFormat('dd MMMM yyyy', 'id').format(ovulationDate)
+              : '-';
+          
+          // Hitung hari sampai haid berikutnya
+          int daysUntilNext = _nextPeriodDate != null
+              ? _nextPeriodDate!.difference(DateTime.now()).inDays
+              : 0;
+          
+          // Window subur: 5 hari sebelum ovulasi sampai ovulasi
+          final fertileStart = ovulationDate.subtract(const Duration(days: 5));
+          final fertileEnd = ovulationDate;
+          
+          setState(() {
+            _summaryData = {
+              'avgCycleLength': _cycleLength,
+              'lastPeriod': lastPeriodFormatted,
+              'nextPeriod': nextPeriodFormatted,
+              'ovulationDate': ovulationFormatted,
+              'fertilityWindowStart': DateFormat('dd MMM', 'id').format(fertileStart),
+              'fertilityWindowEnd': DateFormat('dd MMM', 'id').format(fertileEnd),
+              'daysUntilNext': daysUntilNext > 0 ? daysUntilNext : 0,
+            };
+          });
+          
+          // Generate dates untuk kalender
+          _generateCalendarDates(lastPeriodDate, _nextPeriodDate!, ovulationDate);
+        }
       }
     } catch (e) {
       print('Error loading cycle data: $e');
     }
+  }
+  
+  // ==============================================
+  // GENERATE DATES UNTUK KALENDER
+  // ==============================================
+  void _generateCalendarDates(DateTime lastPeriod, DateTime nextPeriod, DateTime ovulation) {
+    setState(() {
+      // 1. HARI HAID (5 hari setelah lastPeriod)
+      _menstruationDates = [];
+      for (int i = 0; i < 5; i++) {
+        _menstruationDates.add(lastPeriod.add(Duration(days: i)));
+      }
+      
+      // 2. HARI PREDIKSI (periode yang diprediksi)
+      _predictionDates = [];
+      for (int i = 0; i < 5; i++) {
+        _predictionDates.add(nextPeriod.add(Duration(days: i)));
+      }
+      
+      // 3. HARI OVULASI
+      _ovulationDates = [ovulation];
+    });
   }
 
   // ==============================================
@@ -98,7 +156,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (mounted) {
       if (result['success'] == true) {
-        // Navigate ke halaman login
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -123,9 +180,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // ==============================================
-  // SHOW LOGOUT DIALOG
-  // ==============================================
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -160,9 +214,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ==============================================
-  // SHOW PROFILE MENU (dengan logout)
-  // ==============================================
   void _showProfileMenu() {
     showModalBottomSheet(
       context: context,
@@ -216,7 +267,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               title: const Text('Pengaturan'),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Buka halaman pengaturan
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Fitur dalam pengembangan')),
                 );
@@ -237,9 +287,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ==============================================
-  // SHOW PROFILE DETAIL DIALOG
-  // ==============================================
   void _showProfileDialog() {
     showDialog(
       context: context,
@@ -291,6 +338,201 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ==============================================
+  // BUILD KALENDER
+  // ==============================================
+  
+  Widget _buildCalendarGrid() {
+    int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
+    int firstWeekday = DateTime(_selectedDate.year, _selectedDate.month, 1).weekday;
+    
+    // Konversi ke index Minggu (Minggu = 0)
+    firstWeekday = firstWeekday == 7 ? 0 : firstWeekday;
+    
+    List<Widget> dayWidgets = [];
+    
+    // Empty cells untuk hari sebelum tanggal 1
+    for (int i = 0; i < firstWeekday; i++) {
+      dayWidgets.add(const SizedBox.shrink());
+    }
+    
+    // Loop setiap tanggal dalam bulan
+    for (int day = 1; day <= daysInMonth; day++) {
+      DateTime currentDate = DateTime(_selectedDate.year, _selectedDate.month, day);
+      bool isToday = currentDate.day == DateTime.now().day &&
+                     currentDate.month == DateTime.now().month &&
+                     currentDate.year == DateTime.now().year;
+      
+      dayWidgets.add(_buildCalendarDay(day, currentDate, isToday));
+    }
+    
+    return GridView.count(
+      crossAxisCount: 7,
+      childAspectRatio: 1,
+      children: dayWidgets,
+    );
+  }
+
+  Widget _buildCalendarDay(int day, DateTime date, bool isToday) {
+    // Cek status tanggal
+    bool isMenstruation = _isDateInList(date, _menstruationDates);
+    bool isPrediction = _isDateInList(date, _predictionDates);
+    bool isOvulation = _isDateInList(date, _ovulationDates);
+    
+    // Tentukan warna background
+    Color? backgroundColor;
+    Color textColor = Colors.black;
+    
+    if (isMenstruation) {
+      backgroundColor = Colors.pink.shade100;  // Pink muda untuk haid
+      textColor = Colors.pink.shade800;
+    } else if (isPrediction) {
+      backgroundColor = Colors.pink.shade50;   // Pink sangat muda untuk prediksi
+      textColor = Colors.pink.shade600;
+    } else if (isOvulation) {
+      backgroundColor = Colors.purple.shade100; // Ungu muda untuk ovulasi
+      textColor = Colors.purple.shade800;
+    }
+    
+    // Border untuk prediksi (lingkaran putus-putus)
+    Border? border;
+    if (isPrediction && !isMenstruation) {
+      border = Border.all(
+        color: Colors.pink.shade400,
+        width: 1.5,
+        style: BorderStyle.solid,
+      );
+    }
+    
+    return Container(
+      margin: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: backgroundColor,
+        border: border,
+        boxShadow: isToday ? [
+          BoxShadow(
+            color: Colors.pink.shade200,
+            blurRadius: 4,
+            spreadRadius: 1,
+          ),
+        ] : null,
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Lingkaran untuk hari ini (opsional)
+          if (isToday && !isMenstruation && !isPrediction)
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.pink, width: 2),
+              ),
+            ),
+          
+          // Nomor tanggal
+          Center(
+            child: Text(
+              day.toString(),
+              style: TextStyle(
+                fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                color: textColor,
+              ),
+            ),
+          ),
+          
+          // Dot kecil untuk ovulasi
+          if (isOvulation)
+            Positioned(
+              bottom: 2,
+              child: Container(
+                width: 4,
+                height: 4,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.purple,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  bool _isDateInList(DateTime date, List<DateTime> dateList) {
+    return dateList.any((d) => 
+        d.year == date.year && 
+        d.month == date.month && 
+        d.day == date.day);
+  }
+
+  // ==============================================
+  // BUILD WIDGET CYCLE INFO
+  // ==============================================
+  
+  Widget _buildCycleInfo({
+    required IconData icon,
+    required String value,
+    required String label,
+    required String sublabel,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.pink),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        Text(
+          sublabel,
+          style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==============================================
+  // MAIN BUILD
+  // ==============================================
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -304,7 +546,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () {
-              // TODO: Notifikasi
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Fitur dalam pengembangan')),
               );
@@ -468,7 +709,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ),
                         
-                        // Day headers
+                        // Day headers (S S R K J S M)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 10),
                           child: Row(
@@ -493,12 +734,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 10),
                         
                         // Legend
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _LegendItem(color: Colors.red, label: 'Haid'),
-                            _LegendItem(color: Colors.pink, label: 'Prediksi'),
-                            _LegendItem(color: Colors.purple, label: 'Ovulasi'),
+                            _buildLegendItem(color: Colors.pink.shade100, label: 'Haid', isCircle: false),
+                            _buildLegendItem(color: Colors.pink.shade50, label: 'Prediksi', isCircle: true),
+                            _buildLegendItem(color: Colors.purple.shade100, label: 'Ovulasi', isCircle: false),
+                            _buildLegendItem(color: Colors.transparent, label: 'Hari ini', isCircle: true, hasBorder: true),
                           ],
                         ),
                       ],
@@ -517,6 +759,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           label: 'Catat Haid',
                           color: Colors.red,
                           onTap: () {
+                            // TODO: Buka halaman record cycle
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Fitur dalam pengembangan')),
                             );
@@ -546,132 +789,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
     );
   }
-
-  Widget _buildCalendarGrid() {
-    int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
-    int firstWeekday = DateTime(_selectedDate.year, _selectedDate.month, 1).weekday;
-    
-    firstWeekday = firstWeekday == 7 ? 0 : firstWeekday;
-    
-    List<Widget> dayWidgets = [];
-    
-    for (int i = 0; i < firstWeekday; i++) {
-      dayWidgets.add(const SizedBox.shrink());
-    }
-    
-    for (int day = 1; day <= daysInMonth; day++) {
-      DateTime currentDate = DateTime(_selectedDate.year, _selectedDate.month, day);
-      bool isToday = currentDate.day == DateTime.now().day &&
-                     currentDate.month == DateTime.now().month &&
-                     currentDate.year == DateTime.now().year;
-      
-      dayWidgets.add(_buildCalendarDay(day, currentDate, isToday));
-    }
-    
-    return GridView.count(
-      crossAxisCount: 7,
-      childAspectRatio: 1,
-      children: dayWidgets,
-    );
-  }
-
-  Widget _buildCalendarDay(int day, DateTime date, bool isToday) {
-    return Container(
-      margin: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: isToday ? Border.all(color: Colors.pink, width: 2) : null,
-      ),
-      child: Center(
-        child: Text(
-          day.toString(),
-          style: TextStyle(
-            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-            color: isToday ? Colors.pink : Colors.black,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCycleInfo({
-    required IconData icon,
-    required String value,
-    required String label,
-    required String sublabel,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.pink),
-        const SizedBox(height: 5),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        Text(
-          sublabel,
-          style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
+  
+  Widget _buildLegendItem({
     required Color color,
-    required VoidCallback onTap,
+    required String label,
+    required bool isCircle,
+    bool hasBorder = false,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(color: color, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _LegendItem({
-    required this.color,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
     return Row(
       children: [
         Container(
-          width: 12,
-          height: 12,
+          width: 16,
+          height: 16,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.2),
-            shape: BoxShape.circle,
-            border: Border.all(color: color),
+            color: color,
+            shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: isCircle ? null : BorderRadius.circular(4),
+            border: hasBorder ? Border.all(color: Colors.pink, width: 1.5) : null,
           ),
         ),
         const SizedBox(width: 4),

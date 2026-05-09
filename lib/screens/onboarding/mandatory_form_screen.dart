@@ -1,3 +1,7 @@
+// lib/screens/onboarding/mandatory_form_screen.dart
+// VERSION UPDATE - Sesuai dengan logika AI yang benar
+// CATATAN: Panjang siklus TIDAK DIINPUT USER! (dihitung system atau diprediksi AI)
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,9 +20,19 @@ class MandatoryFormScreen extends StatefulWidget {
 class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  // ============================================
+  // FIELD WAJIB (Sesuai Model - TANPA CYCLE LENGTH!)
+  // ============================================
   final _lastPeriodController = TextEditingController();
   final _previousPeriodController = TextEditingController();
-  final _cycleLengthController = TextEditingController();
+  
+  // FIELD YANG DIPERLUKAN MODEL
+  double _painLevel = 5;           // WAJIB (0-10)
+  double _stressLevel = 4;         // WAJIB (0-10)
+  double _sleepHours = 7;          // WAJIB (0-24)
+  double _moodLevel = 7;           // OPSIONAL (1-10)
+  
+  // Field tambahan (disimpan untuk info)
   final _periodDurationController = TextEditingController();
 
   DateTime? _lastPeriodDate;
@@ -30,7 +44,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   @override
   void initState() {
     super.initState();
-    _cycleLengthController.text = '28';
     _periodDurationController.text = '5';
   }
 
@@ -38,9 +51,36 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   void dispose() {
     _lastPeriodController.dispose();
     _previousPeriodController.dispose();
-    _cycleLengthController.dispose();
     _periodDurationController.dispose();
     super.dispose();
+  }
+
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
+  
+  String _getPainLabel(double value) {
+    if (value <= 2) return 'Tidak sakit';
+    if (value <= 4) return 'Sedikit sakit';
+    if (value <= 6) return 'Nyeri sedang';
+    if (value <= 8) return 'Nyeri berat';
+    return 'Sangat berat';
+  }
+  
+  String _getStressLabel(double value) {
+    if (value <= 2) return 'Sangat rileks';
+    if (value <= 4) return 'Sedikit stres';
+    if (value <= 6) return 'Stres sedang';
+    if (value <= 8) return 'Stres berat';
+    return 'Sangat stres';
+  }
+  
+  String _getMoodLabel(double value) {
+    if (value <= 2) return 'Sangat buruk';
+    if (value <= 4) return 'Biasa saja';
+    if (value <= 6) return 'Cukup baik';
+    if (value <= 8) return 'Baik';
+    return 'Sangat baik';
   }
 
   Future<void> _selectDate(
@@ -69,33 +109,22 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
     if (picked != null) {
       String displayDate = DateFormat('dd MMMM yyyy', 'id').format(picked);
-
       controller.text = displayDate;
       onDateSelected(picked);
-
-      if (_lastPeriodDate != null && _previousPeriodDate != null) {
-        _calculateCycleLength();
-      }
-
       setState(() {});
-    }
-  }
-
-  void _calculateCycleLength() {
-    if (_lastPeriodDate != null && _previousPeriodDate != null) {
-      final difference = _lastPeriodDate!
-          .difference(_previousPeriodDate!)
-          .inDays;
-      if (difference > 0) {
-        setState(() {
-          _cycleLengthController.text = difference.abs().toString();
-        });
-      }
     }
   }
 
   Future<void> _saveAndContinue() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    // Validasi tanggal harus diisi
+    if (_lastPeriodDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tanggal haid terakhir wajib diisi'), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -106,19 +135,23 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         throw Exception('User tidak ditemukan. Silakan login kembali.');
       }
 
-      String lastPeriodFormatted = DateFormat(
-        'yyyy-MM-dd',
-      ).format(_lastPeriodDate!);
+      String lastPeriodFormatted = DateFormat('yyyy-MM-dd').format(_lastPeriodDate!);
       String? previousPeriodFormatted = _previousPeriodDate != null
           ? DateFormat('yyyy-MM-dd').format(_previousPeriodDate!)
           : null;
 
+      // ✅ KIRIM DATA DENGAN CYCLE LENGTH DEFAULT 28
+      // Panjang siklus akan diupdate nanti setelah prediksi AI
       final result = await CycleService.saveMandatoryData(
         idUser: user.idUser!,
         lastPeriodDate: lastPeriodFormatted,
         previousPeriodDate: previousPeriodFormatted,
-        cycleLengthDays: int.parse(_cycleLengthController.text),
+        cycleLengthDays: 28,  // Nilai default sementara (akan diupdate AI nanti)
         periodDurationDays: int.parse(_periodDurationController.text),
+        painLevel: _painLevel.toInt(),
+        stressLevel: _stressLevel.toInt(),
+        sleepHours: _sleepHours,
+        moodLevel: _moodLevel.toInt(),
       );
 
       if (result['success'] == true) {
@@ -161,7 +194,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
             onPressed: () {
               Navigator.pop(context);
               _saveCycleIdToLocal();
-              // Perbaiki ini: jangan pakai named route
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
@@ -177,9 +209,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              if (mounted &&
-                  _savedCycleMongoId != null &&
-                  _lastPeriodDate != null) {
+              if (mounted && _savedCycleMongoId != null && _lastPeriodDate != null) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -187,10 +217,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                       cycleId: _savedCycleMongoId!,
                       lastPeriodDate: _lastPeriodDate!,
                       previousPeriodDate: _previousPeriodDate,
-                      cycleLengthDays: int.parse(_cycleLengthController.text),
-                      periodDurationDays: int.parse(
-                        _periodDurationController.text,
-                      ),
+                      cycleLengthDays: 28,  // Default sementara
+                      periodDurationDays: int.parse(_periodDurationController.text),
+                      painLevel: _painLevel.toInt(),
+                      stressLevel: _stressLevel.toInt(),
+                      sleepHours: _sleepHours,
+                      moodLevel: _moodLevel.toInt(),
                     ),
                   ),
                 );
@@ -199,9 +231,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.pink,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('Isi Sekarang'),
           ),
@@ -217,6 +247,10 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     }
   }
 
+  // ============================================
+  // BUILD UI
+  // ============================================
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -241,12 +275,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.pink.shade100.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.pink.shade200),
                   ),
                   child: Row(
                     children: [
@@ -288,54 +322,46 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
                 const SizedBox(height: 30),
 
+                // ============================================
+                // SECTION 1: DATA TANGGAL (WAJIB)
+                // ============================================
+                
+                const Text('📅 Data Tanggal', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+
                 TextFormField(
                   controller: _lastPeriodController,
                   readOnly: true,
-                  onTap: () =>
-                      _selectDate(context, _lastPeriodController, (date) {
-                        _lastPeriodDate = date;
-                      }),
+                  onTap: () => _selectDate(context, _lastPeriodController, (date) {
+                    _lastPeriodDate = date;
+                  }),
                   decoration: InputDecoration(
-                    labelText: 'Tanggal Haid Terakhir',
+                    labelText: 'Tanggal Haid Terakhir *',
                     hintText: 'Pilih tanggal',
-                    prefixIcon: Icon(
-                      Icons.calendar_today,
-                      color: Colors.pink.shade300,
-                    ),
-                    suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.pink),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                    prefixIcon: Icon(Icons.calendar_today, color: Colors.pink.shade300),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
                     filled: true,
                     fillColor: Colors.white,
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty)
-                      return 'Tanggal haid terakhir wajib diisi';
+                    if (value == null || value.isEmpty) return 'Tanggal haid terakhir wajib diisi';
                     return null;
                   },
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 15),
 
                 TextFormField(
                   controller: _previousPeriodController,
                   readOnly: true,
-                  onTap: () =>
-                      _selectDate(context, _previousPeriodController, (date) {
-                        _previousPeriodDate = date;
-                      }),
+                  onTap: () => _selectDate(context, _previousPeriodController, (date) {
+                    _previousPeriodDate = date;
+                  }),
                   decoration: InputDecoration(
                     labelText: 'Tanggal Haid Sebelumnya',
                     hintText: 'Pilih tanggal (opsional)',
-                    prefixIcon: Icon(
-                      Icons.calendar_month,
-                      color: Colors.pink.shade300,
-                    ),
-                    suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.pink),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                    prefixIcon: Icon(Icons.calendar_month, color: Colors.pink.shade300),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
                     filled: true,
                     fillColor: Colors.white,
                     helperText: 'Kosongkan jika tidak tahu',
@@ -344,72 +370,222 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
                 const SizedBox(height: 30),
 
+                // ============================================
+                // SECTION 2: TINGKAT NYERI (WAJIB)
+                // ============================================
+                
+                const Text('💢 Tingkat Nyeri', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 10),
+
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Tidak sakit', style: TextStyle(fontSize: 12)),
+                            const Text('Sangat sakit', style: TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                        Slider(
+                          value: _painLevel,
+                          min: 0,
+                          max: 10,
+                          divisions: 10,
+                          activeColor: Colors.pink,
+                          label: _painLevel.round().toString(),
+                          onChanged: (value) {
+                            setState(() => _painLevel = value);
+                          },
+                        ),
+                        Align(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.pink.shade100,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              _getPainLabel(_painLevel),
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink.shade700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                // ============================================
+                // SECTION 3: TINGKAT STRES (WAJIB)
+                // ============================================
+                
+                const Text('😫 Tingkat Stres', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 10),
+
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Rileks', style: TextStyle(fontSize: 12)),
+                            const Text('Sangat stres', style: TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                        Slider(
+                          value: _stressLevel,
+                          min: 0,
+                          max: 10,
+                          divisions: 10,
+                          activeColor: Colors.orange,
+                          onChanged: (value) => setState(() => _stressLevel = value),
+                        ),
+                        Align(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              _getStressLabel(_stressLevel),
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                // ============================================
+                // SECTION 4: JAM TIDUR (WAJIB)
+                // ============================================
+                
+                const Text('😴 Rata-rata Jam Tidur per Hari', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 10),
+
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Slider(
+                                value: _sleepHours,
+                                min: 4,
+                                max: 10,
+                                divisions: 12,
+                                activeColor: Colors.teal,
+                                onChanged: (value) => setState(() => _sleepHours = value),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.teal.shade100,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${_sleepHours.toStringAsFixed(1)} jam',
+                                style: TextStyle(color: Colors.teal.shade700, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ============================================
+                // SECTION 5: DATA OPSIONAL
+                // ============================================
+                
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.pink.shade50,
+                    color: Colors.blue.shade50,
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Panjang Siklus',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.pink,
+                      Row(
+                        children: [
+                          Icon(Icons.star, color: Colors.amber.shade600, size: 18),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Data Opsional (Isi untuk akurasi lebih baik)',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade700),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      
+                      // Mood Level
+                      Text('😊 Mood Secara Umum', style: TextStyle(fontWeight: FontWeight.w500)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Sangat buruk', style: TextStyle(fontSize: 12)),
+                          const Text('Luar biasa', style: TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                      Slider(
+                        value: _moodLevel,
+                        min: 1,
+                        max: 10,
+                        divisions: 9,
+                        activeColor: Colors.green,
+                        onChanged: (value) => setState(() => _moodLevel = value),
+                      ),
+                      Align(
+                        child: Text(
+                          _getMoodLabel(_moodLevel),
+                          style: TextStyle(fontSize: 12, color: Colors.green.shade700),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      if (_lastPeriodDate != null &&
-                          _previousPeriodDate != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                color: Colors.green.shade400,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Siklus terhitung: ${_cycleLengthController.text} hari',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 10),
+                      
+                      const SizedBox(height: 15),
+                      
+                      // Lama Haid (Opsional)
                       TextFormField(
-                        controller: _cycleLengthController,
+                        controller: _periodDurationController,
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                          labelText: 'Atau masukkan manual',
-                          hintText: 'Contoh: 28',
-                          suffixText: 'hari',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                          labelText: 'Lama Haid (hari)',
+                          hintText: 'Contoh: 5',
+                          prefixIcon: Icon(Icons.timer, color: Colors.blue.shade300),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           filled: true,
                           fillColor: Colors.white,
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return 'Panjang siklus wajib diisi';
-                          if (int.tryParse(value) == null)
-                            return 'Masukkan angka yang valid';
-                          return null;
-                        },
                       ),
                     ],
                   ),
@@ -417,55 +593,22 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
                 const SizedBox(height: 20),
 
-                TextFormField(
-                  controller: _periodDurationController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Lama Haid (hari)',
-                    hintText: 'Contoh: 5',
-                    prefixIcon: Icon(Icons.timer, color: Colors.pink.shade300),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty)
-                      return 'Lama haid wajib diisi';
-                    final days = int.tryParse(value);
-                    if (days == null) return 'Masukkan angka yang valid';
-                    if (days < 2 || days > 10)
-                      return 'Lama haid normal 2-10 hari';
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 30),
-
+                // Info box
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
+                    color: Colors.pink.shade50,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.shade200),
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.blue.shade700,
-                        size: 20,
-                      ),
+                      Icon(Icons.info_outline, color: Colors.pink.shade700, size: 20),
                       const SizedBox(width: 10),
-                      Expanded(
+                      const Expanded(
                         child: Text(
-                          'Data ini akan digunakan untuk prediksi siklus haid kamu. '
-                          'Semakin lengkap datanya, semakin akurat prediksinya.',
-                          style: TextStyle(
-                            color: Colors.blue.shade700,
-                            fontSize: 12,
-                          ),
+                          'Panjang siklus akan dihitung OTOMATIS oleh sistem atau diprediksi AI.\n'
+                          'Anda TIDAK perlu menginputnya.',
+                          style: TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
@@ -474,6 +617,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
                 const SizedBox(height: 30),
 
+                // Submit Button
                 SizedBox(
                   width: double.infinity,
                   height: 55,
@@ -482,18 +626,13 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.pink,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
                             'Simpan & Lanjutkan',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                   ),
                 ),

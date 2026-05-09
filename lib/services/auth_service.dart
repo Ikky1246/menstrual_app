@@ -39,6 +39,12 @@ class AuthService {
         
         await _saveUserData(user, token);
         
+        // ✅ TAMBAHKAN INI: Simpan email dan password untuk refresh token
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_email', email);
+        await prefs.setString('user_password', password);
+        print('✅ Email dan password disimpan untuk refresh token');
+        
         return {
           'success': true, 
           'user': user,
@@ -130,6 +136,7 @@ class AuthService {
   static Future<Map<String, dynamic>> verifyEmailOtp({
     required String email,
     required String otp,
+    String? password, // ✅ TAMBAHKAN parameter password
   }) async {
     try {
       final response = await http.post(
@@ -149,6 +156,14 @@ class AuthService {
         
         final user = User.fromJson(userData);
         await _saveUserData(user, token);
+        
+        // ✅ TAMBAHKAN INI: Simpan email dan password untuk refresh token
+        if (password != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_email', email);
+          await prefs.setString('user_password', password);
+          print('✅ Email dan password disimpan untuk refresh token');
+        }
         
         return {
           'success': true,
@@ -474,6 +489,37 @@ class AuthService {
   }
 
   // ==============================================
+  // REFRESH TOKEN (login ulang dengan email & password tersimpan)
+  // ==============================================
+  static Future<bool> refreshToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString('user_email');
+      final password = prefs.getString('user_password');
+      
+      if (email == null || password == null) {
+        print('❌ Refresh token gagal: email/password tidak tersimpan');
+        return false;
+      }
+      
+      print('🔄 Mencoba refresh token untuk: $email');
+      
+      final result = await login(email: email, password: password);
+      
+      if (result['success'] == true) {
+        print('✅ Refresh token berhasil!');
+        return true;
+      } else {
+        print('❌ Refresh token gagal: ${result['message']}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Refresh token error: $e');
+      return false;
+    }
+  }
+
+  // ==============================================
   // CEK LOGIN STATUS
   // ==============================================
   static Future<bool> isLoggedIn() async {
@@ -509,6 +555,8 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(AppConstants.keyToken);
     await prefs.remove(AppConstants.keyUser);
+    await prefs.remove('user_email');  // ✅ Hapus juga email
+    await prefs.remove('user_password'); // ✅ Hapus juga password
     print('✅ User data cleared');
   }
 }
