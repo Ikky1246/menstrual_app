@@ -37,6 +37,8 @@ dependencies:
   shared_preferences: ^2.2.2
   table_calendar: ^3.0.9
 
+  faker: ^2.1.0           # Untuk generate data palsu
+  avatar_glow: ^2.0.2    # Untuk efek glow pada avatar
 dev_dependencies:
 
 

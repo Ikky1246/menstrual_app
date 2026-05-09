@@ -150,6 +150,12 @@ class AppConstants {
   // Untuk device fisik: http://[IP_Komputer]:8000/api
   static const String apiBaseUrl = 'http://localhost:8000/api';
 
+  // ✅ TAMBAHKAN INI - Python Service URL untuk prediksi
+  // Untuk emulator Android: http://10.0.2.2:8000
+  // Untuk device fisik: http://[IP_Komputer]:8000
+  static const String pythonApiUrl = 'http://localhost:8000';
+  static const String baseUrl = 'http://10.0.2.2:8000'; // Untuk emulator Android
+
   // ==============================================
   // AUTH ENDPOINTS
   // ==============================================
@@ -169,6 +175,9 @@ class AppConstants {
   static const String apiCycleCreate = '/cycle';
   static const String apiCycleUpdate = '/cycle/';
   static const String apiPrediction = '/predictions';
+
+  // ✅ TAMBAHKAN ENDPOINT PREDIKSI BARU
+  static const String apiPredictions = '/predictions';
 
   // ==============================================
   // FORGOT PASSWORD ENDPOINTS
