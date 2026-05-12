@@ -79,7 +79,7 @@ class AppDurations {
   static const Duration splash = Duration(seconds: 2);
   static const Duration animation = Duration(milliseconds: 300);
   static const Duration snackbar = Duration(seconds: 3);
-  static const Duration apiTimeout = Duration(seconds: 10);
+  static const Duration apiTimeout = Duration(seconds: 30);
 }
 
 class AppSpacing {
@@ -146,53 +146,81 @@ class AppConstants {
   // ==============================================
   // API CONFIGURATION - SESUAIKAN DENGAN IP ANDA!
   // ==============================================
-  // Untuk emulator Android: http://10.0.2.2:8000/api
-  // Untuk device fisik: http://[IP_Komputer]:8000/api
-  static const String apiBaseUrl = 'http://localhost:8000/api';
-
-  // ✅ TAMBAHKAN INI - Python Service URL untuk prediksi
-  // Untuk emulator Android: http://10.0.2.2:8000
-  // Untuk device fisik: http://[IP_Komputer]:8000
-  static const String pythonApiUrl = 'http://localhost:8000';
-  static const String baseUrl = 'http://10.0.2.2:8000'; // Untuk emulator Android
+  // 🔴 UNTUK EMULATOR ANDROID (AVD):
+  static const String baseUrl = 'http://127.0.0.1:8000';
+  
+  // 🔴 UNTUK HP REAL (GANTI DENGAN IP KOMPUTER ANDA):
+  // static const String baseUrl = 'http://192.168.1.100:8000';
+  
+  // 🔴 UNTUK LOCALHOST (TESTING DI BROWSER/POSTMAN):
+  // static const String baseUrl = 'http://localhost:8000';
 
   // ==============================================
-  // AUTH ENDPOINTS
+  // AUTH ENDPOINTS (Mobile API)
   // ==============================================
-  static const String apiUserRegister = '/user/register';
-  static const String apiUserLogin = '/user/login';
-  static const String apiUserLogout = '/user/logout';
-  static const String apiUserProfile = '/user/profile';
-  static const String apiUserUpdate = '/user/profile';
+  static const String apiMobileRegister = '/api/mobile/register';
+  static const String apiMobileLogin = '/api/mobile/login';
+  static const String apiMobileLogout = '/api/mobile/logout';
+  static const String apiMobileProfile = '/api/mobile/user/profile';
+  static const String apiMobileUpdateProfile = '/api/mobile/user/profile';
+  
   // OTP Endpoints
-  static const String apiResendOtp = '/user/resend-otp';
-  static const String apiVerifyEmailOtp = '/user/verify-otp';
+  static const String apiMobileVerifyOtp = '/api/mobile/verify-otp';
+  static const String apiMobileResendOtp = '/api/mobile/resend-otp';
+  
+  // Forgot Password Endpoints
+  static const String apiMobileForgotPassword = '/api/mobile/forgot-password';
+  static const String apiMobileVerifyResetOtp = '/api/mobile/verify-otp-reset';
+  static const String apiMobileResetPassword = '/api/mobile/reset-password';
 
   // ==============================================
-  // CYCLE & PREDICTION ENDPOINTS
+  // CYCLE ENDPOINTS (Mobile API)
   // ==============================================
-  static const String apiCycle = '/cycles';
-  static const String apiCycleCreate = '/cycle';
-  static const String apiCycleUpdate = '/cycle/';
-  static const String apiPrediction = '/predictions';
-
-  // ✅ TAMBAHKAN ENDPOINT PREDIKSI BARU
-  static const String apiPredictions = '/predictions';
+  static const String apiMobileCycle = '/api/mobile/cycle';
+  static const String apiMobileCycles = '/api/mobile/cycles';
+  static const String apiMobileCycleLatest = '/api/mobile/cycle/latest';
+  static const String apiMobileCycleUpdate = '/api/mobile/cycle/';
+  static const String apiMobileCycleDelete = '/api/mobile/cycle/';
 
   // ==============================================
-  // FORGOT PASSWORD ENDPOINTS
+  // PREDICTION ENDPOINTS (Mobile API)
   // ==============================================
-  static const String apiForgotPassword = '/forgot-password';
-  static const String apiVerifyResetOtp = '/verify-otp';
-  static const String apiResetPassword = '/reset-password';
+  static const String apiMobilePredict = '/api/mobile/predict';
+  static const String apiMobilePredictionsHistory = '/api/mobile/predictions/history';
+  static const String apiMobilePredictionsDetail = '/api/mobile/predictions/';
+  static const String apiMobilePredictionsHealth = '/api/mobile/predictions/health';
+
+  // ==============================================
+  // ENDPOINT LENGKAP (Helper)
+  // ==============================================
+  static String get fullRegisterUrl => '$baseUrl$apiMobileRegister';
+  static String get fullLoginUrl => '$baseUrl$apiMobileLogin';
+  static String get fullLogoutUrl => '$baseUrl$apiMobileLogout';
+  static String get fullProfileUrl => '$baseUrl$apiMobileProfile';
+  static String get fullCyclesUrl => '$baseUrl$apiMobileCycles';
+  static String get fullCycleLatestUrl => '$baseUrl$apiMobileCycleLatest';
+  static String get fullPredictUrl => '$baseUrl$apiMobilePredict';
+  static String get fullPredictionsHistoryUrl => '$baseUrl$apiMobilePredictionsHistory';
+  
+  static String cycleUpdateUrl(String id) => '$baseUrl$apiMobileCycleUpdate$id';
+  static String cycleDeleteUrl(String id) => '$baseUrl$apiMobileCycleDelete$id';
+  static String predictionDetailUrl(String id) => '$baseUrl$apiMobilePredictionsDetail$id';
 
   // ==============================================
   // CYCLE CONSTANTS
   // ==============================================
-  static const int minCycleLength = 21;
+  static const int minCycleLength = 20;
   static const int maxCycleLength = 45;
   static const int minPeriodDuration = 2;
   static const int maxPeriodDuration = 10;
+  static const int minPainLevel = 0;
+  static const int maxPainLevel = 10;
+  static const int minStressLevel = 0;
+  static const int maxStressLevel = 10;
+  static const double minSleepHours = 0;
+  static const double maxSleepHours = 24;
+  static const int minMoodScore = 1;
+  static const int maxMoodScore = 10;
 
   // ==============================================
   // DATE FORMAT
@@ -200,6 +228,8 @@ class AppConstants {
   static const String dateFormatDisplay = 'dd MMMM yyyy';
   static const String dateFormatApi = 'yyyy-MM-dd';
   static const String dateFormatMonth = 'MMMM yyyy';
+  static const String dateFormatDay = 'dd';
+  static const String dateFormatMonthYear = 'MMMM yyyy';
 
   // ==============================================
   // STORAGE KEYS
@@ -209,6 +239,8 @@ class AppConstants {
   static const String keyCycleData = 'cycle_data';
   static const String keyTheme = 'theme_mode';
   static const String keyNotifications = 'notifications_enabled';
+  static const String keyUserEmail = 'user_email';
+  static const String keyUserPassword = 'user_password';
 }
 
 class AppValidation {
@@ -233,6 +265,16 @@ class AppValidation {
     return null;
   }
 
+  static String? validateConfirmPassword(String? value, String password) {
+    if (value == null || value.isEmpty) {
+      return 'Konfirmasi password tidak boleh kosong';
+    }
+    if (value != password) {
+      return 'Password tidak cocok';
+    }
+    return null;
+  }
+
   static String? validateNumber(String? value, {int? min, int? max}) {
     if (value == null || value.isEmpty) {
       return 'Field tidak boleh kosong';
@@ -250,9 +292,33 @@ class AppValidation {
     return null;
   }
 
-  static String? validateRequired(String? value) {
+  static String? validateDouble(String? value, {double? min, double? max}) {
     if (value == null || value.isEmpty) {
-      return 'Field wajib diisi';
+      return 'Field tidak boleh kosong';
+    }
+    final number = double.tryParse(value);
+    if (number == null) {
+      return 'Masukkan angka yang valid';
+    }
+    if (min != null && number < min) {
+      return 'Nilai minimal $min';
+    }
+    if (max != null && number > max) {
+      return 'Nilai maksimal $max';
+    }
+    return null;
+  }
+
+  static String? validateRequired(String? value, {String? fieldName}) {
+    if (value == null || value.isEmpty) {
+      return '${fieldName ?? 'Field'} wajib diisi';
+    }
+    return null;
+  }
+
+  static String? validateDate(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Tanggal harus diisi';
     }
     return null;
   }
@@ -263,7 +329,11 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
+  static const String verifyOtp = '/verify-otp';
+  static const String resetPassword = '/reset-password';
   static const String onboarding = '/onboarding';
+  static const String mandatoryForm = '/mandatory-form';
+  static const String optionalForm = '/optional-form';
   static const String dashboard = '/dashboard';
   static const String prediction = '/prediction';
   static const String profile = '/profile';

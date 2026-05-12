@@ -1,9 +1,10 @@
 // lib/screens/onboarding/optional_form_screen.dart
-// VERSION UPDATE - Fix overflow & token issue
+// VERSION FINAL - Sesuai dengan API Laravel
 
 import 'package:flutter/material.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
 import 'package:menstrual_app/services/cycle_service.dart';
+import 'package:menstrual_app/utils/constants.dart';
 
 class OptionalFormScreen extends StatefulWidget {
   final String cycleId;
@@ -12,11 +13,11 @@ class OptionalFormScreen extends StatefulWidget {
   final int cycleLengthDays;
   final int periodDurationDays;
   
-  // ✅ DATA BARU dari Mandatory Form (dikirim ke sini)
-  final int painLevel;      // Dari mandatory (0-10)
-  final int stressLevel;    // Dari mandatory (0-10)
-  final double sleepHours;  // Dari mandatory (0-24)
-  final int moodLevel;      // Dari mandatory (1-10)
+  // Data dari Mandatory Form
+  final int painLevel;
+  final int stressLevel;
+  final double sleepHours;
+  final int moodLevel;
 
   const OptionalFormScreen({
     super.key,
@@ -38,16 +39,12 @@ class OptionalFormScreen extends StatefulWidget {
 class _OptionalFormScreenState extends State<OptionalFormScreen> {
   final _formKey = GlobalKey<FormState>();
   
-  // ============================================
-  // DATA DARI MANDATORY (tidak perlu diisi ulang)
-  // ============================================
+  // Data dari mandatory (tidak perlu diisi ulang)
   late int _stressLevel;
   late double _sleepHours;
   late int _moodLevel;
   
-  // ============================================
-  // DATA OPSIONAL TAMBAHAN (bisa diisi user)
-  // ============================================
+  // Data opsional tambahan
   double _weight = 0;
   double _height = 0;
   String? _selectedMood;
@@ -94,62 +91,56 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
     super.dispose();
   }
 
-  Future<void> _saveAndContinue() async {
-    setState(() => _isLoading = true);
+ Future<void> _saveAndContinue() async {
+  setState(() => _isLoading = true);
 
-    final symptomsList = _commonSymptoms
-        .where((s) => s['selected'] == true)
-        .map((s) => s['name'] as String)
-        .toList();
-    
-    // Gabungkan mood dengan catatan
-    String fullNotes = _notesController.text;
-    if (_selectedMood != null && _selectedMood!.isNotEmpty) {
-      fullNotes = fullNotes.isEmpty 
-          ? 'Mood: $_selectedMood' 
-          : '$_selectedMood\n${_notesController.text}';
-    }
+  print('📝 _saveAndContinue() di OptionalFormScreen');
+  print('   cycleId: ${widget.cycleId}');
+  print('   painLevel: ${widget.painLevel}');
+  print('   stressLevel: $_stressLevel');
+  print('   sleepHours: $_sleepHours');
+  print('   moodLevel: $_moodLevel');
 
-    final result = await CycleService.updateOptionalData(
-      cycleId: widget.cycleId,
-      painLevel: widget.painLevel,
-      stressScoreCycle: _stressLevel,
-      sleepHoursCycle: _sleepHours,
-      moodLevel: _moodLevel,
-      weight: _weight > 0 ? _weight : null,
-      height: _height > 0 ? _height : null,
-      symptoms: symptomsList.isNotEmpty ? symptomsList : null,
-      notes: fullNotes.isNotEmpty ? fullNotes : null,
-    );
+  // ✅ UPDATE: Gunakan updateCycle dengan parameter yang benar
+  final result = await CycleService.updateCycle(
+    cycleId: widget.cycleId,
+    painLevel: widget.painLevel,
+    stressScoreCycle: _stressLevel,
+    sleepHoursCycle: _sleepHours,
+    moodScore: _moodLevel,
+  );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+  print('📊 Update result: ${result['success']}');
+  print('   Message: ${result['message']}');
 
-      if (result['success'] == true) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const DashboardScreen()),
-          );
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Data berhasil disimpan! Selamat datang 🎉'),
-              backgroundColor: Colors.pink,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      } else {
+  if (mounted) {
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Gagal menyimpan data'),
-            backgroundColor: Colors.red,
+          const SnackBar(
+            content: Text('Data berhasil disimpan! Selamat datang 🎉'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Gagal menyimpan data'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
+}
 
   String _getMoodEmoji(int level) {
     if (level >= 8) return '😊';
@@ -172,7 +163,7 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Data Tambahan'),
-        backgroundColor: Colors.pink,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -192,44 +183,44 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.pink.shade50, Colors.white],
+            colors: [AppColors.primaryLight, Colors.white],
           ),
         ),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header Info - Data sudah diisi dari mandatory
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.green.shade200),
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppSpacing.lg),
+                  border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(AppSpacing.sm),
                       decoration: BoxDecoration(
-                        color: Colors.green,
+                        color: AppColors.success,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.check_circle, color: Colors.white, size: 30),
                     ),
-                    const SizedBox(width: 15),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
                             'Data Dasar Sudah Tersimpan',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                            style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold, color: AppColors.success),
                           ),
                           Text(
-                            'Tingkat nyeri: ${widget.painLevel}/10 | Stres: $_stressLevel/10 | Tidur: ${_sleepHours.toStringAsFixed(1)} jam',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            'Nyeri: ${widget.painLevel}/10 | Stres: $_stressLevel/10 | Tidur: ${_sleepHours.toStringAsFixed(1)} jam',
+                            style: TextStyle(fontSize: AppFontSize.sm, color: Colors.grey.shade600),
                           ),
                         ],
                       ),
@@ -238,74 +229,73 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                 ),
               ),
               
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpacing.lg),
               
               // ============================================
               // SECTION: DATA YANG SUDAH DIISI (READ ONLY)
               // ============================================
               
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(15),
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(AppSpacing.md),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       '📋 Ringkasan Data Anda',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.md, color: AppColors.primary),
                     ),
-                    const SizedBox(height: 10),
-                    // FIX OVERFLOW: Gunakan Wrap agar bisa pindah baris
+                    const SizedBox(height: AppSpacing.sm),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
                       children: [
-                        _buildInfoChip(Icons.favorite, 'Nyeri: ${widget.painLevel}/10', Colors.red),
+                        _buildInfoChip(Icons.favorite, 'Nyeri: ${widget.painLevel}/10', AppColors.primary),
                         _buildInfoChip(Icons.bolt, 'Stres: $_stressLevel/10', Colors.orange),
                         _buildInfoChip(Icons.nightlight_round, 'Tidur: ${_sleepHours.toStringAsFixed(1)} jam', Colors.indigo),
-                        _buildInfoChip(Icons.mood, 'Mood: ${_getMoodLabel(_moodLevel)}', Colors.green),
+                        _buildInfoChip(Icons.mood, 'Mood: ${_getMoodLabel(_moodLevel)}', AppColors.success),
                       ],
                     ),
                   ],
                 ),
               ),
               
-              const SizedBox(height: 30),
+              const SizedBox(height: AppSpacing.xl),
               
               // ============================================
               // SECTION: DATA TAMBAHAN OPSIONAL
               // ============================================
               
               const Text('📝 Data Tambahan (Opsional)', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 5),
+                  style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
+              const SizedBox(height: AppSpacing.xs),
               Text('Isi untuk mendapatkan prediksi yang lebih akurat',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
-              const SizedBox(height: 15),
+                  style: TextStyle(fontSize: AppFontSize.sm, color: Colors.grey)),
+              const SizedBox(height: AppSpacing.md),
               
               // Mood (sudah terisi, bisa diubah)
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.mood, color: Colors.pink.shade400),
-                          const SizedBox(width: 10),
+                          Icon(Icons.mood, color: AppColors.primary),
+                          const SizedBox(width: AppSpacing.sm),
                           const Text('Mood Hari Ini', style: TextStyle(fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: AppSpacing.sm),
                       Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
                         children: _moods.map((mood) {
                           final isSelected = _selectedMood == mood;
                           return ChoiceChip(
@@ -322,7 +312,7 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                                 else _moodLevel = 5;
                               });
                             },
-                            selectedColor: Colors.pink.shade100,
+                            selectedColor: AppColors.primaryLight,
                             backgroundColor: Colors.grey.shade100,
                           );
                         }).toList(),
@@ -332,24 +322,24 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                 ),
               ),
               
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.lg),
               
               // ============================================
               // GEJALA (Optional - tidak dipakai model)
               // ============================================
               
               const Text('🤕 Gejala yang Dirasakan', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              // FIX: GridView dengan ukuran lebih kecil agar pas
+                  style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
+              const SizedBox(height: AppSpacing.sm),
+              
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 4,
                   childAspectRatio: 0.85,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+                  crossAxisSpacing: AppSpacing.sm,
+                  mainAxisSpacing: AppSpacing.sm,
                 ),
                 itemCount: _commonSymptoms.length,
                 itemBuilder: (context, index) {
@@ -362,10 +352,10 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                     },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: symptom['selected'] ? Colors.pink.shade100 : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
+                        color: symptom['selected'] ? AppColors.primaryLight : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(AppSpacing.sm),
                         border: Border.all(
-                          color: symptom['selected'] ? Colors.pink : Colors.grey.shade300,
+                          color: symptom['selected'] ? AppColors.primary : Colors.grey.shade300,
                           width: symptom['selected'] ? 2 : 1,
                         ),
                       ),
@@ -373,15 +363,15 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(symptom['icon'] as IconData, 
-                              color: symptom['selected'] ? Colors.pink : Colors.grey.shade600,
+                              color: symptom['selected'] ? AppColors.primary : Colors.grey.shade600,
                               size: 28),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: AppSpacing.xs),
                           Text(
                             symptom['name'] as String,
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 9,
-                              color: symptom['selected'] ? Colors.pink : Colors.grey.shade700,
+                              color: symptom['selected'] ? AppColors.primary : Colors.grey.shade700,
                               fontWeight: symptom['selected'] ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
@@ -392,7 +382,7 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                 },
               ),
               
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.lg),
               
               // ============================================
               // BERAT BADAN & TINGGI (Opsional - untuk BMI)
@@ -400,16 +390,16 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
               
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
                           Icon(Icons.fitness_center, color: Colors.teal),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: AppSpacing.sm),
                           const Text('Data Fisik (Opsional)', style: TextStyle(fontWeight: FontWeight.bold)),
                           const Spacer(),
                           TextButton(
@@ -423,30 +413,34 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                         ],
                       ),
                       if (_showWeightHeight) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: AppSpacing.sm),
                         Row(
                           children: [
                             Expanded(
                               child: TextFormField(
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   labelText: 'Berat Badan (kg)',
                                   hintText: 'Contoh: 55',
-                                  border: OutlineInputBorder(),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.sm)),
+                                  filled: true,
+                                  fillColor: Colors.white,
                                 ),
                                 onChanged: (value) {
                                   _weight = double.tryParse(value) ?? 0;
                                 },
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: AppSpacing.sm),
                             Expanded(
                               child: TextFormField(
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   labelText: 'Tinggi Badan (cm)',
                                   hintText: 'Contoh: 165',
-                                  border: OutlineInputBorder(),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.sm)),
+                                  filled: true,
+                                  fillColor: Colors.white,
                                 ),
                                 onChanged: (value) {
                                   _height = double.tryParse(value) ?? 0;
@@ -457,10 +451,10 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                         ),
                         if (_weight > 0 && _height > 0)
                           Padding(
-                            padding: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.only(top: AppSpacing.sm),
                             child: Text(
                               'BMI: ${(_weight / ((_height / 100) * (_height / 100))).toStringAsFixed(1)}',
-                              style: TextStyle(fontSize: 12, color: Colors.teal),
+                              style: TextStyle(fontSize: AppFontSize.sm, color: Colors.teal),
                             ),
                           ),
                       ],
@@ -469,24 +463,24 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                 ),
               ),
               
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.lg),
               
               // Catatan
               const Text('📝 Catatan Tambahan', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
+                  style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
+              const SizedBox(height: AppSpacing.sm),
               TextFormField(
                 controller: _notesController,
                 maxLines: 3,
                 decoration: InputDecoration(
                   hintText: 'Contoh: Hari ini merasa sangat lelah...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                   filled: true,
                   fillColor: Colors.white,
                 ),
               ),
               
-              const SizedBox(height: 30),
+              const SizedBox(height: AppSpacing.xl),
               
               // Submit Button
               SizedBox(
@@ -495,14 +489,14 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _saveAndContinue,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.pink,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text('Selesai & Lihat Dashboard', 
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -514,17 +508,17 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
   
   Widget _buildInfoChip(IconData icon, String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppSpacing.lg),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 11, color: color)),
+          const SizedBox(width: AppSpacing.xs),
+          Text(label, style: TextStyle(fontSize: AppFontSize.sm, color: color)),
         ],
       ),
     );

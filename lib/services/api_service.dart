@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
+import 'dart:math' as math;
 
 class ApiService {
   // ==============================================
@@ -13,20 +14,15 @@ class ApiService {
   }
 
   // ==============================================
-  // PREDIKSI DENGAN AI (VERSI BARU)
+  // PREDIKSI DENGAN AI (VERSI TERBARU - MATCH DENGAN LARAVEL)
   // ==============================================
   static Future<Map<String, dynamic>> predictCycle({
-    required DateTime lastCycleStartDate,
-    DateTime? previousCycleStartDate,
+    required String tanggalHaidTerakhir,
+    String? tanggalHaidBulanSebelumnya,
     required int painLevel,
     required int stressScore,
     required double sleepHours,
     int? moodScore,
-    int? age,
-    double? weightKg,
-    double? heightCm,
-    bool? pcosDiagnosed,
-    bool? birthControlUse,
   }) async {
     try {
       final token = await _getToken();
@@ -38,36 +34,27 @@ class ApiService {
         };
       }
 
-      // Format tanggal ke YYYY-MM-DD
-      String formatDate(DateTime date) {
-        return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      }
-
       // Siapkan payload sesuai dengan yang dibutuhkan Laravel
       Map<String, dynamic> payload = {
-        'last_cycle_start_date': formatDate(lastCycleStartDate),
+        'tanggal_haid_terakhir': tanggalHaidTerakhir,
         'pain_level': painLevel,
         'stress_score_cycle': stressScore,
         'sleep_hours_cycle': sleepHours,
       };
       
       // Optional fields (hanya tambahkan jika tidak null)
-      if (previousCycleStartDate != null) {
-        payload['previous_cycle_start_date'] = formatDate(previousCycleStartDate);
+      if (tanggalHaidBulanSebelumnya != null && tanggalHaidBulanSebelumnya.isNotEmpty) {
+        payload['tanggal_haid_bulan_sebelumnya'] = tanggalHaidBulanSebelumnya;
       }
       
       if (moodScore != null) payload['mood_score'] = moodScore;
-      if (age != null) payload['age'] = age;
-      if (weightKg != null) payload['weight_kg'] = weightKg;
-      if (heightCm != null) payload['height_cm'] = heightCm;
-      if (pcosDiagnosed != null) payload['pcos_diagnosed'] = pcosDiagnosed;
-      if (birthControlUse != null) payload['birth_control_use'] = birthControlUse;
 
-      print('📤 Sending prediction request to: ${AppConstants.baseUrl}/api/predictions');
+      print('📤 Sending prediction request to: ${AppConstants.baseUrl}/api/mobile/predict');
       print('📦 Payload: $payload');
+      print('🔑 Token: ${token.substring(0, math.min(20, token.length))}...');
 
       final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/predictions'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/predict'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -123,70 +110,6 @@ class ApiService {
   }
 
   // ==============================================
-  // PREDIKSI LAMA (MASIH DISIMPAN UNTUK KOMPATIBILITAS)
-  // ==============================================
-  static Future<Map<String, dynamic>> predictCycleOld({
-    required int cycleLengthDays,
-    required int stressScoreCycle,
-    required double sleepHoursCycle,
-    required String startDate,
-  }) async {
-    try {
-      final token = await _getToken();
-      
-      final headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      };
-      
-      if (token != null) {
-        headers["Authorization"] = "Bearer $token";
-      }
-
-      print('📤 Predicting cycle (old method)...');
-      print('   cycle_length_days: $cycleLengthDays');
-      print('   stress_score_cycle: $stressScoreCycle');
-      print('   sleep_hours_cycle: $sleepHoursCycle');
-      print('   start_date: $startDate');
-
-      final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiPrediction}'),
-        headers: headers,
-        body: jsonEncode({
-          "cycle_length_days": cycleLengthDays,
-          "stress_score_cycle": stressScoreCycle,
-          "sleep_hours_cycle": sleepHoursCycle,
-          "start_date": startDate,
-        }),
-      ).timeout(AppDurations.apiTimeout);
-
-      print('📊 Prediction response status: ${response.statusCode}');
-      print('📦 Response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'data': data,
-          'message': 'Prediksi berhasil'
-        };
-      } else {
-        final errorData = jsonDecode(response.body);
-        return {
-          'success': false,
-          'message': errorData['message'] ?? 'Gagal melakukan prediksi'
-        };
-      }
-    } catch (e) {
-      print('❌ Prediction error: $e');
-      return {
-        'success': false,
-        'message': 'Gagal terhubung ke server: $e'
-      };
-    }
-  }
-
-  // ==============================================
   // CEK STATUS KESEHATAN AI SERVICE
   // ==============================================
   static Future<Map<String, dynamic>> checkAIHealth() async {
@@ -202,9 +125,9 @@ class ApiService {
       }
       
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/api/predictions/health'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/predictions/health'),
         headers: headers,
-      ).timeout(Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 5));
       
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -228,7 +151,7 @@ class ApiService {
       }
       
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/api/predictions/history'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/predictions/history'),
         headers: {
           'Authorization': 'Bearer $token',
         },

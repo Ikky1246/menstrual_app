@@ -5,7 +5,6 @@ import '../models/cycle_model.dart';
 import '../utils/constants.dart';
 import 'auth_service.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:math' as math;
 
 class CycleService {
   static void _log(String message) {
@@ -15,123 +14,86 @@ class CycleService {
   }
 
   // ==============================================
-  // GET TOKEN DENGAN VALIDASI
+  // GET TOKEN
   // ==============================================
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    
-    // Coba ambil dari AppConstants.keyToken
     String? token = prefs.getString(AppConstants.keyToken);
     
-    // Jika tidak ada, coba dari key lain
     if (token == null) {
       token = prefs.getString('token');
-    }
-    
-    if (token == null) {
-      token = prefs.getString('auth_token');
-    }
-    
-    if (kDebugMode) {
-      print('🔑 Token status: ${token != null ? "Ada (${token.substring(0, math.min(20, token.length))}...)" : "TIDAK ADA"}');
     }
     
     return token;
   }
 
   // ==============================================
-  // REFRESH/RELOGIN (jika token expired)
+  // SAVE CYCLE DATA (Sesuai dengan backend Laravel)
   // ==============================================
-  static Future<bool> _refreshToken() async {
-    _log('🔄 Mencoba refresh token...');
-    
-    final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('user_email');
-    final password = prefs.getString('user_password');
-    
-    if (email != null && password != null) {
-      _log('🔄 Mencoba login ulang dengan email: $email');
-      final result = await AuthService.login(email: email, password: password);
-      
-      if (result['success'] == true) {
-        _log('✅ Refresh token berhasil!');
-        return true;
-      }
-    }
-    
-    _log('❌ Refresh token gagal!');
-    return false;
-  }
-
-  // ==============================================
-  // SAVE MANDATORY CYCLE DATA
-  // ==============================================
-  static Future<Map<String, dynamic>> saveMandatoryData({
-    required int idUser,
+  static Future<Map<String, dynamic>> saveCycle({
     required String lastPeriodDate,
     String? previousPeriodDate,
     required int cycleLengthDays,
-    required int periodDurationDays,
     required int painLevel,
-    required int stressLevel,
-    required double sleepHours,
-    required int moodLevel,
+    required int stressScoreCycle,
+    required double sleepHoursCycle,
+    int? moodScore,
   }) async {
     try {
-      String? token = await _getToken();
+      final token = await _getToken();
       if (token == null) {
         return {'success': false, 'message': 'Token tidak ditemukan. Silakan login kembali.'};
       }
 
-      _log('📤 Saving mandatory cycle data...');
-      _log('   id_user: $idUser');
+      _log('📤 Saving cycle data...');
       _log('   last_period_date: $lastPeriodDate');
 
+      final Map<String, dynamic> payload = {
+        'last_period_date': lastPeriodDate,
+        'cycle_length_days': cycleLengthDays,
+        'pain_level': painLevel,
+        'stress_score_cycle': stressScoreCycle,
+        'sleep_hours_cycle': sleepHoursCycle,
+      };
+
+      if (previousPeriodDate != null) {
+        payload['previous_period_date'] = previousPeriodDate;
+      }
+      if (moodScore != null) {
+        payload['mood_score'] = moodScore;
+      }
+
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiCycleCreate}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/cycle'),
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "Authorization": "Bearer $token",
         },
-        body: jsonEncode({
-          'id_user': idUser,
-          'last_period_date': lastPeriodDate,
-          'previous_period_date': previousPeriodDate,
-          'cycle_length_days': cycleLengthDays,
-          'period_duration_days': periodDurationDays,
-          'pain_level': painLevel,
-          'stress_score_cycle': stressLevel,
-          'sleep_hours_cycle': sleepHours,
-          'mood_score': moodLevel,
-        }),
+        body: jsonEncode(payload),
       ).timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
       _log('📊 Response: ${response.statusCode}');
+      _log('📊 Response body: ${response.body}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         return {
           'success': true,
-          'data': data,
-          'cycleId': data['_id'] ?? data['id'] ?? data['data']?['_id']
+          'data': data['data'] ?? data,
+          'message': data['message'] ?? 'Data siklus berhasil disimpan'
         };
       } else if (response.statusCode == 401) {
-        // Token expired, coba refresh
-        _log('⚠️ Token expired, mencoba refresh...');
-        final refreshed = await _refreshToken();
+        final refreshed = await AuthService.refreshToken();
         if (refreshed) {
-          // Retry dengan token baru
-          return await saveMandatoryData(
-            idUser: idUser,
+          return await saveCycle(
             lastPeriodDate: lastPeriodDate,
             previousPeriodDate: previousPeriodDate,
             cycleLengthDays: cycleLengthDays,
-            periodDurationDays: periodDurationDays,
             painLevel: painLevel,
-            stressLevel: stressLevel,
-            sleepHours: sleepHours,
-            moodLevel: moodLevel,
+            stressScoreCycle: stressScoreCycle,
+            sleepHoursCycle: sleepHoursCycle,
+            moodScore: moodScore,
           );
         } else {
           return {'success': false, 'message': 'Sesi habis, silakan login kembali'};
@@ -149,125 +111,50 @@ class CycleService {
   }
 
   // ==============================================
-  // UPDATE WITH OPTIONAL DATA
+  // GET LATEST CYCLE (DIPERBAIKI)
   // ==============================================
-static Future<Map<String, dynamic>> updateOptionalData({
-  required String cycleId,
-  required int painLevel,
-  required int stressScoreCycle,
-  required double sleepHoursCycle,
-  required int moodLevel,
-  double? weight,
-  double? height,
-  List<String>? symptoms,
-  String? notes,
-}) async {
-  try {
-    final token = await _getToken();
-
-    if (token == null || token.isEmpty) {
-      return {
-        'success': false,
-        'message': 'Token tidak ditemukan'
-      };
-    }
-
-    // ✅ CEK APAKAH CYCLE ID MILIK USER INI
-    final Map<String, dynamic> data = {
-      'pain_level': painLevel,
-      'stress_score_cycle': stressScoreCycle,
-      'sleep_hours_cycle': sleepHoursCycle,
-      'mood_score': moodLevel,
-    };
-
-    if (weight != null) data['weight_kg'] = weight;
-    if (height != null) data['height_cm'] = height;
-    if (symptoms != null && symptoms.isNotEmpty) {
-      data['symptoms'] = symptoms;
-    }
-    if (notes != null && notes.isNotEmpty) {
-      data['notes'] = notes;
-    }
-
-    final url = Uri.parse(
-      '${AppConstants.apiBaseUrl}${AppConstants.apiCycleUpdate}$cycleId',
-    );
-
-    print('📤 URL: $url');
-    print('📤 METHOD: PUT'); // ✅ GANTI ke PUT jika backend pakai PUT
-    print('📤 TOKEN: Bearer $token');
-    print('📤 BODY: ${jsonEncode(data)}');
-
-    final response = await http.put(  // ✅ atau .patch tergantung backend
-      url,
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode(data),
-    ).timeout(AppDurations.apiTimeout);
-
-    print('📊 STATUS: ${response.statusCode}');
-    print('📊 RESPONSE: ${response.body}');
-
-    // ✅ HANDLE KHUSUS 403
-    if (response.statusCode == 403) {
-      Map<String, dynamic> errorData = {};
-      try {
-        errorData = jsonDecode(response.body);
-      } catch (_) {}
-      
-      // Cek apakah perlu verifikasi email
-      if (errorData['message']?.contains('verifikasi') == true) {
-        return {
-          'success': false,
-          'message': 'Silakan verifikasi email Anda terlebih dahulu',
-          'need_verification': true,
-        };
-      }
-      
-      // Cek apakah perlu refresh token
-      final refreshed = await _refreshToken();
-      if (refreshed) {
-        return await updateOptionalData(
-          cycleId: cycleId,
-          painLevel: painLevel,
-          stressScoreCycle: stressScoreCycle,
-          sleepHoursCycle: sleepHoursCycle,
-          moodLevel: moodLevel,
-          weight: weight,
-          height: height,
-          symptoms: symptoms,
-          notes: notes,
-        );
-      }
-    }
-
-    Map<String, dynamic> responseData = {};
+  static Future<Map<String, dynamic>> getLatestCycle() async {
     try {
-      responseData = jsonDecode(response.body);
-    } catch (_) {}
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'Token tidak ditemukan'};
+      }
 
-    if (response.statusCode == 200) {
-      return {
-        'success': true,
-        'data': responseData,
-      };
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/cycle/latest'),
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(AppDurations.apiTimeout);
+
+      _log('📊 Get latest cycle response: ${response.statusCode}');
+      _log('📊 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        if (data['success'] == true && data['data'] != null) {
+          try {
+            final cycle = CycleData.fromJson(data['data'] as Map<String, dynamic>);
+            _log('✅ Cycle parsed successfully: id=${cycle.id}, cycleLength=${cycle.cycleLengthDays}');
+            return {'success': true, 'cycle': cycle};
+          } catch (e) {
+            _log('❌ Error parsing cycle: $e');
+            return {'success': false, 'message': 'Error parsing data: $e'};
+          }
+        }
+        return {'success': false, 'message': data['message'] ?? 'Tidak ada data'};
+      } else if (response.statusCode == 404) {
+        return {'success': false, 'message': 'Belum ada data siklus'};
+      } else {
+        return {'success': false, 'message': 'Gagal mengambil data siklus'};
+      }
+    } catch (e) {
+      _log('❌ Error getting latest cycle: $e');
+      return {'success': false, 'message': 'Error: $e'};
     }
-
-    return {
-      'success': false,
-      'message': responseData['message'] ?? 'Gagal update cycle',
-    };
-  } catch (e) {
-    print('❌ ERROR UPDATE CYCLE: $e');
-    return {
-      'success': false,
-      'message': 'Error: $e',
-    };
   }
-}
 
   // ==============================================
   // GET ALL CYCLES
@@ -280,7 +167,7 @@ static Future<Map<String, dynamic>> updateOptionalData({
       }
 
       final response = await http.get(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiCycle}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/cycles'),
         headers: {
           "Accept": "application/json",
           "Authorization": "Bearer $token",
@@ -288,24 +175,20 @@ static Future<Map<String, dynamic>> updateOptionalData({
       ).timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      _log('📊 Get cycles response: ${response.statusCode}');
+      _log('📊 Get all cycles response: ${response.statusCode}');
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && data['success'] == true) {
         List<CycleData> cycles = [];
         
-        final List<dynamic> cyclesData;
-        if (data['data'] != null && data['data'] is List) {
-          cyclesData = data['data'] as List<dynamic>;
-        } else if (data is List) {
-          cyclesData = data as List<dynamic>;
-        } else {
-          cyclesData = [];
+        final List<dynamic> cyclesData = data['data'] ?? [];
+        for (var item in cyclesData) {
+          try {
+            cycles.add(CycleData.fromJson(item as Map<String, dynamic>));
+          } catch (e) {
+            _log('❌ Error parsing cycle item: $e');
+          }
         }
         
-        cycles = cyclesData
-            .map((item) => CycleData.fromJson(item as Map<String, dynamic>))
-            .toList();
-            
         return {'success': true, 'cycles': cycles};
       } else {
         return {
@@ -321,17 +204,96 @@ static Future<Map<String, dynamic>> updateOptionalData({
   }
 
   // ==============================================
-  // GET LATEST CYCLE
+  // UPDATE CYCLE (untuk optional form)
   // ==============================================
-  static Future<Map<String, dynamic>> getLatestCycle() async {
+  static Future<Map<String, dynamic>> updateCycle({
+    required String cycleId,
+    int? painLevel,
+    int? stressScoreCycle,
+    double? sleepHoursCycle,
+    int? moodScore,
+  }) async {
     try {
       final token = await _getToken();
       if (token == null) {
         return {'success': false, 'message': 'Token tidak ditemukan'};
       }
 
-      final response = await http.get(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiCycle}/latest'),
+      final Map<String, dynamic> payload = {};
+      if (painLevel != null) payload['pain_level'] = painLevel;
+      if (stressScoreCycle != null) payload['stress_score_cycle'] = stressScoreCycle;
+      if (sleepHoursCycle != null) payload['sleep_hours_cycle'] = sleepHoursCycle;
+      if (moodScore != null) payload['mood_score'] = moodScore;
+
+      final url = '${AppConstants.baseUrl}/api/mobile/cycle/$cycleId';
+      
+      _log('📤 Update cycle URL: $url');
+      _log('📤 Payload: $payload');
+
+      final response = await http.put(
+        Uri.parse(url),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode(payload),
+      ).timeout(AppDurations.apiTimeout);
+
+      final data = jsonDecode(response.body);
+      _log('📊 Update cycle response: ${response.statusCode}');
+      _log('📊 Response body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Data siklus berhasil diupdate',
+          'data': data['data'],
+        };
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'message': 'Data siklus tidak ditemukan'
+        };
+      } else if (response.statusCode == 401) {
+        final refreshed = await AuthService.refreshToken();
+        if (refreshed) {
+          return await updateCycle(
+            cycleId: cycleId,
+            painLevel: painLevel,
+            stressScoreCycle: stressScoreCycle,
+            sleepHoursCycle: sleepHoursCycle,
+            moodScore: moodScore,
+          );
+        } else {
+          return {'success': false, 'message': 'Sesi habis, silakan login kembali'};
+        }
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Gagal update data siklus'
+        };
+      }
+    } catch (e) {
+      _log('❌ Error updating cycle: $e');
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  // ==============================================
+  // DELETE CYCLE
+  // ==============================================
+  static Future<Map<String, dynamic>> deleteCycle({
+    required String cycleId,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'Token tidak ditemukan'};
+      }
+
+      final response = await http.delete(
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/cycle/$cycleId'),
         headers: {
           "Accept": "application/json",
           "Authorization": "Bearer $token",
@@ -339,22 +301,122 @@ static Future<Map<String, dynamic>> updateOptionalData({
       ).timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      _log('📊 Get latest cycle response: ${response.statusCode}');
+      _log('📊 Delete cycle response: ${response.statusCode}');
+      _log('📊 Response body: ${response.body}');
 
-      if (response.statusCode == 200) {
-        CycleData? cycle;
-        if (data['data'] != null) {
-          cycle = CycleData.fromJson(data['data'] as Map<String, dynamic>);
-        } else if (data is Map<String, dynamic>) {
-          cycle = CycleData.fromJson(data);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'message': 'Data siklus berhasil dihapus'
+        };
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'message': 'Data siklus tidak ditemukan'
+        };
+      } else if (response.statusCode == 401) {
+        final refreshed = await AuthService.refreshToken();
+        if (refreshed) {
+          return await deleteCycle(cycleId: cycleId);
+        } else {
+          return {'success': false, 'message': 'Sesi habis, silakan login kembali'};
         }
-        return {'success': true, 'cycle': cycle};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Tidak ada data'};
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Gagal hapus data siklus'
+        };
       }
     } catch (e) {
-      _log('❌ Error getting latest cycle: $e');
+      _log('❌ Error deleting cycle: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
   }
+
+  // ==============================================
+  // GET CYCLE BY ID
+  // ==============================================
+  static Future<Map<String, dynamic>> getCycleById({
+    required String cycleId,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'Token tidak ditemukan'};
+      }
+
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/cycle/$cycleId'),
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(AppDurations.apiTimeout);
+
+      final data = jsonDecode(response.body);
+      _log('📊 Get cycle by id response: ${response.statusCode}');
+
+      if (response.statusCode == 200 && data['success'] == true && data['data'] != null) {
+        try {
+          final cycle = CycleData.fromJson(data['data'] as Map<String, dynamic>);
+          return {'success': true, 'cycle': cycle};
+        } catch (e) {
+          return {'success': false, 'message': 'Error parsing data: $e'};
+        }
+      } else if (response.statusCode == 404) {
+        return {'success': false, 'message': 'Data siklus tidak ditemukan'};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Gagal mengambil data siklus'};
+      }
+    } catch (e) {
+      _log('❌ Error getting cycle by id: $e');
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+  // ==============================================
+// SUBMIT CORRECTION (Koreksi siklus dari user)
+// ==============================================
+static Future<Map<String, dynamic>> submitCorrection({
+  required DateTime expectedStartDate,
+  required DateTime actualStartDate,
+  required String correctionType, // 'start' or 'end'
+}) async {
+  try {
+    final token = await _getToken();
+    if (token == null) {
+      return {'success': false, 'message': 'Token tidak ditemukan'};
+    }
+
+    final payload = {
+      'expected_start_date': expectedStartDate.toIso8601String().split('T')[0],
+      'actual_start_date': actualStartDate.toIso8601String().split('T')[0],
+      'correction_type': correctionType,
+    };
+
+    final response = await http.post(
+      Uri.parse('${AppConstants.baseUrl}/api/mobile/correction'),
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode(payload),
+    ).timeout(AppDurations.apiTimeout);
+
+    final data = jsonDecode(response.body);
+    _log('📊 Correction response: ${response.statusCode}');
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      return {
+        'success': true,
+        'message': data['message'] ?? 'Koreksi berhasil disimpan',
+      };
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Gagal menyimpan koreksi'};
+    }
+  } catch (e) {
+    _log('❌ Error submitting correction: $e');
+    return {'success': false, 'message': 'Error: $e'};
+  }
+}
 }
