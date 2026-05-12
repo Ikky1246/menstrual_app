@@ -13,17 +13,18 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print('🔐 Mencoba login user ke: ${AppConstants.apiBaseUrl}${AppConstants.apiUserLogin}');
-      
-      final request = LoginRequest(email: email, password: password);
+      print('🔐 Mencoba login user ke: ${AppConstants.baseUrl}/api/mobile/login');
       
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiUserLogin}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/login'),
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: jsonEncode(request.toJson()),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+        }),
       ).timeout(AppDurations.apiTimeout);
 
       print('📊 Response status: ${response.statusCode}');
@@ -39,7 +40,7 @@ class AuthService {
         
         await _saveUserData(user, token);
         
-        // ✅ TAMBAHKAN INI: Simpan email dan password untuk refresh token
+        // Simpan email dan password untuk refresh token
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_email', email);
         await prefs.setString('user_password', password);
@@ -75,10 +76,10 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print('🌐 Mengirim request register ke: ${AppConstants.apiBaseUrl}${AppConstants.apiUserRegister}');
+      print('🌐 Mengirim request register ke: ${AppConstants.baseUrl}/api/mobile/register');
       
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiUserRegister}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/register'),
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
@@ -131,16 +132,16 @@ class AuthService {
   }
 
   // ==============================================
-  // VERIFY OTP (setelah register) - Menggunakan apiVerifyEmailOtp
+  // VERIFY OTP (setelah register)
   // ==============================================
   static Future<Map<String, dynamic>> verifyEmailOtp({
     required String email,
     required String otp,
-    String? password, // ✅ TAMBAHKAN parameter password
+    String? password,
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiVerifyEmailOtp}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           'email': email,
@@ -157,7 +158,6 @@ class AuthService {
         final user = User.fromJson(userData);
         await _saveUserData(user, token);
         
-        // ✅ TAMBAHKAN INI: Simpan email dan password untuk refresh token
         if (password != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('user_email', email);
@@ -187,14 +187,14 @@ class AuthService {
   }
 
   // ==============================================
-  // RESEND OTP (setelah register)
+  // RESEND OTP
   // ==============================================
   static Future<Map<String, dynamic>> resendOtp({
     required String email,
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiResendOtp}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/resend-otp'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'email': email}),
       ).timeout(AppDurations.apiTimeout);
@@ -223,7 +223,7 @@ class AuthService {
   }
 
   // ==============================================
-  // LOGOUT - untuk USER (mobile)
+  // LOGOUT
   // ==============================================
   static Future<Map<String, dynamic>> logout() async {
     final prefs = await SharedPreferences.getInstance();
@@ -231,10 +231,10 @@ class AuthService {
 
     try {
       if (token != null) {
-        print('🚪 Logout user dari: ${AppConstants.apiBaseUrl}${AppConstants.apiUserLogout}');
+        print('🚪 Logout user dari: ${AppConstants.baseUrl}/api/mobile/logout');
         
         await http.post(
-          Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiUserLogout}'),
+          Uri.parse('${AppConstants.baseUrl}/api/mobile/logout'),
           headers: {
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -252,7 +252,7 @@ class AuthService {
   }
 
   // ==============================================
-  // GET CURRENT USER (dari local storage)
+  // GET CURRENT USER
   // ==============================================
   static Future<User?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
@@ -280,7 +280,7 @@ class AuthService {
       }
 
       final response = await http.get(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiUserProfile}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
         headers: {
           "Accept": "application/json",
           "Authorization": "Bearer $token",
@@ -314,7 +314,7 @@ class AuthService {
   }
 
   // ==============================================
-  // UPDATE PROFILE (Onboarding & Edit)
+  // UPDATE PROFILE
   // ==============================================
   static Future<Map<String, dynamic>> updateProfile({
     String? namaLengkap,
@@ -329,22 +329,21 @@ class AuthService {
         return {'success': false, 'message': 'Token tidak ditemukan'};
       }
 
-      final request = UpdateProfileRequest(
-        namaLengkap: namaLengkap,
-        noTelepon: noTelepon,
-        age: age,
-        weightKg: weightKg,
-        heightCm: heightCm,
-      );
+      final Map<String, dynamic> payload = {};
+      if (namaLengkap != null) payload['nama_lengkap'] = namaLengkap;
+      if (noTelepon != null) payload['no_telepon'] = noTelepon;
+      if (age != null) payload['age'] = age;
+      if (weightKg != null) payload['weight_kg'] = weightKg;
+      if (heightCm != null) payload['height_cm'] = heightCm;
 
       final response = await http.put(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiUserUpdate}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "Authorization": "Bearer $token",
         },
-        body: jsonEncode(request.toJson()),
+        body: jsonEncode(payload),
       ).timeout(AppDurations.apiTimeout);
 
       final responseData = jsonDecode(response.body);
@@ -377,7 +376,7 @@ class AuthService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiForgotPassword}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/forgot-password'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'email': email}),
       ).timeout(AppDurations.apiTimeout);
@@ -406,7 +405,7 @@ class AuthService {
   }
 
   // ==============================================
-  // VERIFY OTP FOR RESET PASSWORD - Menggunakan apiVerifyResetOtp
+  // VERIFY OTP FOR RESET PASSWORD
   // ==============================================
   static Future<Map<String, dynamic>> verifyResetOtp({
     required String email,
@@ -414,7 +413,7 @@ class AuthService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiVerifyResetOtp}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp-reset'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           'email': email,
@@ -456,7 +455,7 @@ class AuthService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('${AppConstants.apiBaseUrl}${AppConstants.apiResetPassword}'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/reset-password'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           'email': email,
@@ -489,7 +488,7 @@ class AuthService {
   }
 
   // ==============================================
-  // REFRESH TOKEN (login ulang dengan email & password tersimpan)
+  // REFRESH TOKEN
   // ==============================================
   static Future<bool> refreshToken() async {
     try {
@@ -555,8 +554,8 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(AppConstants.keyToken);
     await prefs.remove(AppConstants.keyUser);
-    await prefs.remove('user_email');  // ✅ Hapus juga email
-    await prefs.remove('user_password'); // ✅ Hapus juga password
+    await prefs.remove('user_email');
+    await prefs.remove('user_password');
     print('✅ User data cleared');
   }
 }

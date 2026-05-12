@@ -1,8 +1,12 @@
+// lib/screens/prediction_screen.dart
+// VERSION FINAL - Sesuai dengan API Laravel yang sudah berhasil di-test
+// CATATAN: User TIDAK menginput panjang siklus, cukup input tanggal dan gejala!
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
-import '../services/cycle_service.dart';
+import '../utils/constants.dart';
 
 class PredictionScreen extends StatefulWidget {
   const PredictionScreen({super.key});
@@ -13,17 +17,14 @@ class PredictionScreen extends StatefulWidget {
 
 class _PredictionScreenState extends State<PredictionScreen> {
   // ============================================
-  // CONTROLER UNTUK INPUT (BARU)
+  // CONTROLLER UNTUK INPUT
   // ============================================
-  final _dateController = TextEditingController();      // Tanggal haid terakhir
-  final _previousDateController = TextEditingController(); // Tanggal haid sebelumnya (opsional)
-  final _painController = TextEditingController();      // Tingkat nyeri (0-10)
-  final _stressController = TextEditingController();    // Tingkat stres (0-10)
-  final _sleepController = TextEditingController();     // Jam tidur (0-24)
-  final _moodController = TextEditingController();      // Mood (opsional, 1-10)
-  final _ageController = TextEditingController();       // Usia (opsional)
-  final _weightController = TextEditingController();    // Berat badan (opsional)
-  final _heightController = TextEditingController();    // Tinggi badan (opsional)
+  final _dateController = TextEditingController();        // Tanggal haid terakhir (WAJIB)
+  final _previousDateController = TextEditingController(); // Tanggal haid sebelumnya (OPSIONAL)
+  final _painController = TextEditingController();        // Tingkat nyeri (0-10) WAJIB
+  final _stressController = TextEditingController();      // Tingkat stres (0-10) WAJIB
+  final _sleepController = TextEditingController();       // Jam tidur (0-24) WAJIB
+  final _moodController = TextEditingController();        // Mood (1-10) OPSIONAL
 
   // State variables
   String _result = "";
@@ -31,12 +32,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
   DateTime? _selectedDate;
   DateTime? _selectedPreviousDate;
   
-  // Untuk pilihan Yes/No
-  bool? _pcosDiagnosed;
-  bool? _birthControlUse;
-  
-  // Untuk menampilkan/menyembunyikan form opsional
-  bool _showOptionalForm = false;
+  // Untuk menampilkan/menyembunyikan form tips
+  bool _showTips = true;
   
   // Riwayat prediksi
   List<Map<String, dynamic>> _recentPredictions = [];
@@ -45,8 +42,14 @@ class _PredictionScreenState extends State<PredictionScreen> {
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
-    _dateController.text = DateFormat('yyyy-MM-dd').format(_selectedDate!);
-    _loadLatestCycleData();
+    _dateController.text = DateFormat(AppConstants.dateFormatApi).format(_selectedDate!);
+    
+    // Set default values
+    _painController.text = '5';
+    _stressController.text = '4';
+    _sleepController.text = '7';
+    _moodController.text = '7';
+    
     _loadPredictionHistory();
   }
 
@@ -58,33 +61,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     _stressController.dispose();
     _sleepController.dispose();
     _moodController.dispose();
-    _ageController.dispose();
-    _weightController.dispose();
-    _heightController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadLatestCycleData() async {
-    try {
-      final result = await CycleService.getLatestCycle();
-      if (result['success'] == true && result['cycle'] != null) {
-        final cycle = result['cycle'];
-        setState(() {
-          if (cycle.stressScoreCycle != null) {
-            _stressController.text = cycle.stressScoreCycle.toString();
-          }
-          if (cycle.sleepHoursCycle != null) {
-            _sleepController.text = cycle.sleepHoursCycle.toString();
-          }
-          if (cycle.lastPeriodDate.isNotEmpty) {
-            _dateController.text = cycle.lastPeriodDate;
-            _selectedDate = DateTime.tryParse(cycle.lastPeriodDate);
-          }
-        });
-      }
-    } catch (e) {
-      print('Error loading cycle data: $e');
-    }
   }
 
   Future<void> _loadPredictionHistory() async {
@@ -108,13 +85,13 @@ class _PredictionScreenState extends State<PredictionScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.pink.shade400,
+              primary: AppColors.primary,
               onPrimary: Colors.white,
               onSurface: Colors.grey.shade800,
             ),
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
-                foregroundColor: Colors.pink.shade400,
+                foregroundColor: AppColors.primary,
               ),
             ),
           ),
@@ -126,7 +103,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     if (picked != null) {
       setState(() {
         _selectedDate = picked;
-        _dateController.text = DateFormat('yyyy-MM-dd').format(picked);
+        _dateController.text = DateFormat(AppConstants.dateFormatApi).format(picked);
       });
     }
   }
@@ -141,7 +118,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.pink.shade400,
+              primary: AppColors.primary,
               onPrimary: Colors.white,
               onSurface: Colors.grey.shade800,
             ),
@@ -154,7 +131,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     if (picked != null) {
       setState(() {
         _selectedPreviousDate = picked;
-        _previousDateController.text = DateFormat('yyyy-MM-dd').format(picked);
+        _previousDateController.text = DateFormat(AppConstants.dateFormatApi).format(picked);
       });
     }
   }
@@ -164,7 +141,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     // VALIDASI INPUT WAJIB
     // ============================================
     if (_dateController.text.isEmpty) {
-      _showError('Tanggal mulai haid harus diisi!');
+      _showError('Tanggal haid terakhir harus diisi!');
       return;
     }
     
@@ -187,6 +164,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     int painLevel = int.tryParse(_painController.text) ?? 0;
     int stressLevel = int.tryParse(_stressController.text) ?? 0;
     double sleepHours = double.tryParse(_sleepController.text) ?? 7;
+    int? moodScore = _moodController.text.isNotEmpty ? int.tryParse(_moodController.text) : null;
     
     if (painLevel < 0 || painLevel > 10) {
       _showError('Tingkat nyeri harus antara 0-10');
@@ -202,6 +180,11 @@ class _PredictionScreenState extends State<PredictionScreen> {
       _showError('Jam tidur harus antara 0-24');
       return;
     }
+    
+    if (moodScore != null && (moodScore < 1 || moodScore > 10)) {
+      _showError('Mood harus antara 1-10');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -209,31 +192,43 @@ class _PredictionScreenState extends State<PredictionScreen> {
     });
 
     try {
+      // Format tanggal ke format yang benar
+      String tanggalHaidTerakhir = _dateController.text;
+      String? tanggalHaidBulanSebelumnya = _previousDateController.text.isNotEmpty 
+          ? _previousDateController.text 
+          : null;
+      
+      print('📤 Sending prediction request...');
+      print('   tanggal_haid_terakhir: $tanggalHaidTerakhir');
+      print('   tanggal_haid_bulan_sebelumnya: $tanggalHaidBulanSebelumnya');
+      print('   pain_level: $painLevel');
+      print('   stress_score: $stressLevel');
+      print('   sleep_hours: $sleepHours');
+      print('   mood_score: $moodScore');
+
       // ============================================
-      // PANGGIL API PREDIKSI DENGAN LOGIKA BARU
+      // PANGGIL API PREDIKSI (endpoint /api/mobile/predict)
       // ============================================
       final result = await ApiService.predictCycle(
-        lastCycleStartDate: _selectedDate!,
-        previousCycleStartDate: _selectedPreviousDate,
+        tanggalHaidTerakhir: tanggalHaidTerakhir,
+        tanggalHaidBulanSebelumnya: tanggalHaidBulanSebelumnya,
         painLevel: painLevel,
         stressScore: stressLevel,
         sleepHours: sleepHours,
-        moodScore: _moodController.text.isNotEmpty ? int.tryParse(_moodController.text) : null,
-        age: _ageController.text.isNotEmpty ? int.tryParse(_ageController.text) : null,
-        weightKg: _weightController.text.isNotEmpty ? double.tryParse(_weightController.text) : null,
-        heightCm: _heightController.text.isNotEmpty ? double.tryParse(_heightController.text) : null,
-        pcosDiagnosed: _pcosDiagnosed,
-        birthControlUse: _birthControlUse,
+        moodScore: moodScore,
       );
+
+      print('📥 Prediction result: $result');
 
       if (result['success'] == true) {
         final resultData = result['data'];
         setState(() {
           _result = 
-              "📊 Panjang Siklus: ${resultData['predicted_cycle_length']} hari\n"
-              "📅 Perkiraan Haid Berikutnya: ${resultData['next_period_date']}\n"
+              "📊 Prediksi Panjang Siklus: ${resultData['predicted_cycle_length']} hari\n"
+              "📅 Perkiraan Haid Berikutnya: ${_formatDateString(resultData['next_period_date'])}\n"
               "🎯 Tingkat Kepercayaan: ${resultData['confidence_level']}\n"
-              "📏 Margin Error: ±${resultData['error_margin']} hari";
+              "📏 Margin Error: ±${resultData['error_margin']} hari\n"
+              "💡 ${resultData['message']}";
           _isLoading = false;
         });
 
@@ -241,17 +236,27 @@ class _PredictionScreenState extends State<PredictionScreen> {
         _loadPredictionHistory(); // Refresh history
       } else {
         setState(() {
-          _result = "Error: ${result['message']}";
+          _result = "❌ Error: ${result['message']}";
           _isLoading = false;
         });
         _showError(result['message']);
       }
     } catch (e) {
+      print('❌ Prediction error: $e');
       setState(() {
-        _result = "Error: Gagal terhubung ke server";
+        _result = "❌ Error: Gagal terhubung ke server\n\nPastikan:\n1. Laravel berjalan di port 8000\n2. Python AI Service berjalan di port 8001\n3. Token masih valid";
         _isLoading = false;
       });
       _showError('Gagal terhubung ke server: $e');
+    }
+  }
+  
+  String _formatDateString(String dateStr) {
+    try {
+      DateTime date = DateTime.parse(dateStr);
+      return DateFormat(AppConstants.dateFormatDisplay, 'id').format(date);
+    } catch (e) {
+      return dateStr;
     }
   }
 
@@ -259,7 +264,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red.shade700,
+        backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -270,7 +275,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green.shade600,
+        backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -279,15 +284,17 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
   void _fillSampleData() {
     setState(() {
+      // Set tanggal default (1 bulan yang lalu untuk contoh)
+      DateTime oneMonthAgo = DateTime.now().subtract(const Duration(days: 28));
+      _selectedDate = oneMonthAgo;
+      _dateController.text = DateFormat(AppConstants.dateFormatApi).format(oneMonthAgo);
+      
       _painController.text = '5';
       _stressController.text = '4';
-      _sleepController.text = '7';
+      _sleepController.text = '7.5';
       _moodController.text = '7';
-      _ageController.text = '25';
-      _weightController.text = '55';
-      _heightController.text = '160';
-      _pcosDiagnosed = false;
-      _birthControlUse = false;
+      _previousDateController.clear();
+      _selectedPreviousDate = null;
     });
     
     _showSuccess('Data contoh telah diisi');
@@ -295,17 +302,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
   void _clearForm() {
     setState(() {
-      _painController.clear();
-      _stressController.clear();
-      _sleepController.clear();
-      _moodController.clear();
-      _ageController.clear();
-      _weightController.clear();
-      _heightController.clear();
+      // Reset ke tanggal hari ini
+      _selectedDate = DateTime.now();
+      _dateController.text = DateFormat(AppConstants.dateFormatApi).format(DateTime.now());
       _previousDateController.clear();
       _selectedPreviousDate = null;
-      _pcosDiagnosed = null;
-      _birthControlUse = null;
+      _painController.text = '5';
+      _stressController.text = '4';
+      _sleepController.text = '7';
+      _moodController.text = '7';
       _result = "";
     });
   }
@@ -313,10 +318,10 @@ class _PredictionScreenState extends State<PredictionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.pink.shade50,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Prediksi Haid'),
-        backgroundColor: Colors.pink,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -338,16 +343,16 @@ class _PredictionScreenState extends State<PredictionScreen> {
             // Header
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: Colors.pink,
+                color: AppColors.primary,
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.pink.withValues(alpha: 0.3),
+                    color: AppColors.primary.withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -371,7 +376,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                   const Text(
                     'Prediksi Siklus Haid',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: AppFontSize.xl,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -385,15 +390,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.lg),
 
             // Form Utama
             Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
+              margin: const EdgeInsets.all(AppSpacing.md),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppSpacing.lg),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.grey.withValues(alpha: 0.1),
@@ -407,43 +412,67 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 children: [
                   const Text(
                     '📊 Data Wajib',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: AppFontSize.lg, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.md),
+                  
+                  // Catatan penting: User tidak input panjang siklus!
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: AppColors.primary),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Panjang siklus akan dihitung OTOMATIS dari selisih tanggal. '
+                            'Anda tidak perlu menginput panjang siklus!',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: AppSpacing.lg),
 
-                  // Tanggal Haid Terakhir
+                  // Tanggal Haid Terakhir (WAJIB)
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade200),
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: ListTile(
-                      leading: Icon(Icons.calendar_today, color: Colors.pink.shade300),
-                      title: const Text('Tanggal Mulai Haid BULAN INI *'),
+                      leading: Icon(Icons.calendar_today, color: AppColors.primary),
+                      title: const Text('Tanggal Haid Terakhir *'),
                       subtitle: Text(_dateController.text),
-                      trailing: const Icon(Icons.edit, color: Colors.pink),
+                      trailing: const Icon(Icons.edit, color: AppColors.primary),
                       onTap: _selectDate,
                     ),
                   ),
 
-                  const SizedBox(height: 15),
+                  const SizedBox(height: AppSpacing.md),
 
-                  // Tanggal Haid Sebelumnya (Opsional)
+                  // Tanggal Haid Sebelumnya (OPSIONAL)
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade200),
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: ListTile(
-                      leading: Icon(Icons.calendar_month, color: Colors.pink.shade200),
-                      title: const Text('Tanggal Mulai Haid BULAN LALU (opsional)'),
-                      subtitle: Text(_previousDateController.text.isEmpty ? 'Belum diisi' : _previousDateController.text),
-                      trailing: const Icon(Icons.edit, color: Colors.pink),
+                      leading: Icon(Icons.calendar_month, color: AppColors.primary.withValues(alpha: 0.6)),
+                      title: const Text('Tanggal Haid Sebelumnya (opsional)'),
+                      subtitle: Text(_previousDateController.text.isEmpty ? 'Belum diisi (akan menggunakan default 28 hari)' : _previousDateController.text),
+                      trailing: const Icon(Icons.edit, color: AppColors.primary),
                       onTap: _selectPreviousDate,
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Tingkat Nyeri
                   _buildInputField(
@@ -455,7 +484,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     unit: 'skala',
                   ),
 
-                  const SizedBox(height: 15),
+                  const SizedBox(height: AppSpacing.md),
 
                   // Tingkat Stres
                   _buildInputField(
@@ -467,7 +496,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     unit: 'skala',
                   ),
 
-                  const SizedBox(height: 15),
+                  const SizedBox(height: AppSpacing.md),
 
                   // Jam Tidur
                   _buildInputField(
@@ -479,143 +508,19 @@ class _PredictionScreenState extends State<PredictionScreen> {
                     unit: 'jam',
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppSpacing.md),
 
-                  // Tombol Tampilkan Form Opsional
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _showOptionalForm = !_showOptionalForm;
-                      });
-                    },
-                    icon: Icon(_showOptionalForm ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
-                    label: Text(_showOptionalForm ? 'Sembunyikan Data Tambahan' : 'Tampilkan Data Tambahan (Meningkatkan Akurasi)'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.pink.shade700,
-                    ),
+                  // Mood (Opsional)
+                  _buildInputField(
+                    controller: _moodController,
+                    label: '😊 Rata-rata Mood (opsional)',
+                    hint: '1-10',
+                    icon: Icons.mood,
+                    tooltip: 'Rata-rata mood selama siklus (1 = buruk, 10 = sangat baik)',
+                    unit: 'skala',
                   ),
 
-                  // Form Opsional (ditampilkan jika _showOptionalForm = true)
-                  if (_showOptionalForm) ...[
-                    const SizedBox(height: 10),
-                    const Divider(),
-                    const SizedBox(height: 10),
-                    const Text(
-                      '📈 Data Tambahan (Opsional)',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 15),
-
-                    _buildInputField(
-                      controller: _moodController,
-                      label: '😊 Rata-rata Mood',
-                      hint: '1-10',
-                      icon: Icons.mood,
-                      tooltip: 'Rata-rata mood selama siklus (1 = buruk, 10 = sangat baik)',
-                      unit: 'skala',
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    _buildInputField(
-                      controller: _ageController,
-                      label: '📅 Usia',
-                      hint: 'Tahun',
-                      icon: Icons.cake,
-                      tooltip: 'Usia Anda dalam tahun',
-                      unit: 'tahun',
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    _buildInputField(
-                      controller: _weightController,
-                      label: '⚖️ Berat Badan',
-                      hint: 'kg',
-                      icon: Icons.monitor_weight,
-                      tooltip: 'Berat badan Anda',
-                      unit: 'kg',
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    _buildInputField(
-                      controller: _heightController,
-                      label: '📏 Tinggi Badan',
-                      hint: 'cm',
-                      icon: Icons.straighten,
-                      tooltip: 'Tinggi badan Anda',
-                      unit: 'cm',
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    // PCOS
-                    Row(
-                      children: [
-                        Icon(Icons.health_and_safety, color: Colors.pink.shade300),
-                        const SizedBox(width: 8),
-                        const Text('Apakah Anda didiagnosis PCOS?'),
-                        const Spacer(),
-                        ChoiceChip(
-                          label: const Text('Ya'),
-                          selected: _pcosDiagnosed == true,
-                          onSelected: (selected) {
-                            setState(() {
-                              _pcosDiagnosed = selected;
-                            });
-                          },
-                          selectedColor: Colors.pink.shade100,
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('Tidak'),
-                          selected: _pcosDiagnosed == false,
-                          onSelected: (selected) {
-                            setState(() {
-                              _pcosDiagnosed = selected ? false : null;
-                            });
-                          },
-                          selectedColor: Colors.pink.shade100,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    // KB Hormonal
-                    Row(
-                      children: [
-                        Icon(Icons.medication, color: Colors.pink.shade300),
-                        const SizedBox(width: 8),
-                        const Text('Apakah Anda menggunakan KB hormonal?'),
-                        const Spacer(),
-                        ChoiceChip(
-                          label: const Text('Ya'),
-                          selected: _birthControlUse == true,
-                          onSelected: (selected) {
-                            setState(() {
-                              _birthControlUse = selected;
-                            });
-                          },
-                          selectedColor: Colors.pink.shade100,
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('Tidak'),
-                          selected: _birthControlUse == false,
-                          onSelected: (selected) {
-                            setState(() {
-                              _birthControlUse = selected ? false : null;
-                            });
-                          },
-                          selectedColor: Colors.pink.shade100,
-                        ),
-                      ],
-                    ),
-                  ],
-
-                  const SizedBox(height: 25),
+                  const SizedBox(height: AppSpacing.lg),
 
                   // Tombol Prediksi
                   Row(
@@ -624,7 +529,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _predict,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.pink,
+                            backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 15),
                             shape: RoundedRectangleBorder(
@@ -642,7 +547,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                                 )
                               : const Text(
                                   'Prediksi Sekarang',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold),
                                 ),
                         ),
                       ),
@@ -659,7 +564,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                         icon: const Icon(Icons.auto_awesome, size: 18),
                         label: const Text('Contoh Data'),
                         style: TextButton.styleFrom(
-                          foregroundColor: Colors.pink.shade700,
+                          foregroundColor: AppColors.primary,
                         ),
                       ),
                       TextButton.icon(
@@ -679,16 +584,16 @@ class _PredictionScreenState extends State<PredictionScreen> {
             // Hasil Prediksi
             if (_result.isNotEmpty)
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(20),
+                margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.pink.shade400, Colors.pink.shade600],
+                    colors: [AppColors.primary, AppColors.primaryDark],
                   ),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(AppSpacing.lg),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.pink.withValues(alpha: 0.3),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -700,7 +605,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                       '✨ Hasil Prediksi AI ✨',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
+                        fontSize: AppFontSize.lg,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -720,6 +625,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
                             iconData = Icons.calendar_today;
                           } else if (line.contains('Tingkat Kepercayaan')) {
                             iconData = Icons.psychology;
+                          } else if (line.contains('Margin Error')) {
+                            iconData = Icons.science;
                           } else {
                             iconData = Icons.info_outline;
                           }
@@ -733,7 +640,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
                                 Expanded(
                                   child: Text(
                                     line,
-                                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                                    style: const TextStyle(color: Colors.white, fontSize: AppFontSize.md),
                                   ),
                                 ),
                               ],
@@ -749,8 +656,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
                         const Icon(Icons.info_outline, color: Colors.white70, size: 16),
                         const SizedBox(width: 5),
                         Text(
-                          'Prediksi berdasarkan AI (MAE ±1.7 hari)',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
+                          'Prediksi berdasarkan AI Linear Regression (MAE ±1.7 hari)',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: AppFontSize.sm),
                         ),
                       ],
                     ),
@@ -758,38 +665,48 @@ class _PredictionScreenState extends State<PredictionScreen> {
                 ),
               ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.lg),
 
-            // Tips
+            // Tips (Collapsible)
             Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.pink.shade100),
+                border: Border.all(color: AppColors.primaryLight),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.lightbulb, color: Colors.amber.shade600),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Tips untuk Prediksi Akurat',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  leading: Icon(Icons.lightbulb, color: Colors.amber.shade600),
+                  title: const Text(
+                    'Tips untuk Prediksi Akurat',
+                    style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 10),
-                  _buildTipItem('Semakin lengkap data (stres, tidur, mood) semakin akurat prediksi'),
-                  _buildTipItem('Isi tanggal haid BULAN LALU untuk hasil lebih baik'),
-                  _buildTipItem('Data usia, berat, dan tinggi membantu AI memahami profil Anda'),
-                  _buildTipItem('Catat siklus secara rutin untuk prediksi yang makin akurat'),
-                ],
+                  initiallyExpanded: _showTips,
+                  onExpansionChanged: (expanded) {
+                    setState(() {
+                      _showTips = expanded;
+                    });
+                  },
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Column(
+                        children: [
+                          _buildTipItem('✅ Isi tanggal haid sebelumnya untuk hasil lebih akurat'),
+                          _buildTipItem('✅ Semakin lengkap data (stres, tidur, mood) semakin baik prediksi'),
+                          _buildTipItem('✅ Catat siklus secara rutin untuk prediksi yang makin akurat'),
+                          _buildTipItem('✅ Panjang siklus akan dihitung OTOMATIS, Anda tidak perlu menginputnya'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+            
+            const SizedBox(height: AppSpacing.lg),
           ],
         ),
       ),
@@ -809,17 +726,17 @@ class _PredictionScreenState extends State<PredictionScreen> {
       children: [
         Row(
           children: [
-            Icon(icon, color: Colors.pink.shade300, size: 20),
-            const SizedBox(width: 5),
+            Icon(icon, color: AppColors.primary, size: 20),
+            const SizedBox(width: AppSpacing.xs),
             Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(width: 5),
+            const SizedBox(width: AppSpacing.xs),
             Tooltip(
               message: tooltip,
               child: Icon(Icons.info_outline, size: 16, color: Colors.grey.shade400),
             ),
           ],
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: AppSpacing.xs),
         TextFormField(
           controller: controller,
           keyboardType: TextInputType.number,
@@ -834,7 +751,7 @@ class _PredictionScreenState extends State<PredictionScreen> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(15),
-              borderSide: BorderSide(color: Colors.pink.shade300, width: 2),
+              borderSide: BorderSide(color: AppColors.primary, width: 2),
             ),
             filled: true,
             fillColor: Colors.grey.shade50,
@@ -846,13 +763,13 @@ class _PredictionScreenState extends State<PredictionScreen> {
 
   Widget _buildTipItem(String tip) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('• ', style: TextStyle(fontSize: 16)),
+          Text('• ', style: TextStyle(fontSize: AppFontSize.md, color: AppColors.primary)),
           Expanded(
-            child: Text(tip, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+            child: Text(tip, style: TextStyle(color: Colors.grey.shade700, fontSize: AppFontSize.sm)),
           ),
         ],
       ),
@@ -877,9 +794,15 @@ class _PredictionScreenState extends State<PredictionScreen> {
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       child: ListTile(
                         title: Text('${pred['predicted_cycle_length'] ?? '-'} hari'),
-                        subtitle: Text('Perkiraan: ${pred['predicted_next_period'] ?? '-'}'),
-                        trailing: Text('${pred['confidence_score'] ?? 0}%'),
-                        onTap: () => Navigator.pop(context),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Tanggal: ${pred['last_cycle_start_date'] ?? '-'}'),
+                            Text('Perkiraan: ${pred['predicted_next_date'] ?? '-'}'),
+                          ],
+                        ),
+                        trailing: Text('${pred['error_margin'] ?? 0} hari error'),
+                        isThreeLine: true,
                       ),
                     );
                   },
@@ -905,25 +828,25 @@ class _PredictionScreenState extends State<PredictionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Prediksi dihitung menggunakan AI (Linear Regression):',
+              'AI memprediksi panjang siklus menggunakan:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             _buildInfoBullet('Panjang siklus sebelumnya (dari selisih tanggal)'),
-            _buildInfoBullet('Tingkat nyeri'),
-            _buildInfoBullet('Tingkat stres'),
-            _buildInfoBullet('Pola tidur'),
-            _buildInfoBullet('Mood, usia, BMI, PCOS, KB (opsional)'),
+            _buildInfoBullet('Tingkat nyeri (0-10)'),
+            _buildInfoBullet('Tingkat stres (0-10)'),
+            _buildInfoBullet('Pola tidur (jam/hari)'),
+            _buildInfoBullet('Mood (1-10) - opsional'),
             const SizedBox(height: 15),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.pink.shade50,
+                color: AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Text(
                 '⚠️ User TIDAK PERNAH menginput panjang siklus!\nPanjang siklus adalah HASIL PREDIKSI AI.',
-                style: TextStyle(fontSize: 12, color: Colors.pink),
+                style: TextStyle(fontSize: AppFontSize.sm, color: AppColors.primary),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -931,12 +854,12 @@ class _PredictionScreenState extends State<PredictionScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: AppColors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Text(
-                '✅ Akurasi: MAE ±1.7 hari\n✅ Tingkat kepercayaan: Tinggi',
-                style: TextStyle(fontSize: 12, color: Colors.green),
+                '✅ Akurasi: MAE ±1.72 hari\n✅ Tingkat kepercayaan: Tinggi',
+                style: TextStyle(fontSize: AppFontSize.sm, color: AppColors.success),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -957,8 +880,8 @@ class _PredictionScreenState extends State<PredictionScreen> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Icon(Icons.circle, size: 6, color: Colors.pink.shade400),
-          const SizedBox(width: 8),
+          Icon(Icons.circle, size: 6, color: AppColors.primary),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(child: Text(text)),
         ],
       ),

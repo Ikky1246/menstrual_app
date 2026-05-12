@@ -1,6 +1,5 @@
 // lib/screens/onboarding/mandatory_form_screen.dart
-// VERSION UPDATE - Sesuai dengan logika AI yang benar
-// CATATAN: Panjang siklus TIDAK DIINPUT USER! (dihitung system atau diprediksi AI)
+// VERSION FINAL - Dengan navigasi yang sudah diperbaiki
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +8,7 @@ import 'package:menstrual_app/screens/onboarding/optional_form_screen.dart';
 import 'package:menstrual_app/services/auth_service.dart';
 import 'package:menstrual_app/services/cycle_service.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
+import 'package:menstrual_app/utils/constants.dart';
 
 class MandatoryFormScreen extends StatefulWidget {
   const MandatoryFormScreen({super.key});
@@ -45,6 +45,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   void initState() {
     super.initState();
     _periodDurationController.text = '5';
+    print('📱 MandatoryFormScreen diinisialisasi');
   }
 
   @override
@@ -97,7 +98,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.pink.shade400,
+              primary: AppColors.primary,
               onPrimary: Colors.white,
               onSurface: Colors.grey.shade800,
             ),
@@ -108,7 +109,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     );
 
     if (picked != null) {
-      String displayDate = DateFormat('dd MMMM yyyy', 'id').format(picked);
+      String displayDate = DateFormat(AppConstants.dateFormatDisplay, 'id').format(picked);
       controller.text = displayDate;
       onDateSelected(picked);
       setState(() {});
@@ -116,73 +117,113 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   }
 
   Future<void> _saveAndContinue() async {
-    if (!_formKey.currentState!.validate()) return;
-    
-    // Validasi tanggal harus diisi
-    if (_lastPeriodDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tanggal haid terakhir wajib diisi'), backgroundColor: Colors.red),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final user = await AuthService.getCurrentUser();
-
-      if (user == null || user.idUser == null) {
-        throw Exception('User tidak ditemukan. Silakan login kembali.');
-      }
-
-      String lastPeriodFormatted = DateFormat('yyyy-MM-dd').format(_lastPeriodDate!);
-      String? previousPeriodFormatted = _previousPeriodDate != null
-          ? DateFormat('yyyy-MM-dd').format(_previousPeriodDate!)
-          : null;
-
-      // ✅ KIRIM DATA DENGAN CYCLE LENGTH DEFAULT 28
-      // Panjang siklus akan diupdate nanti setelah prediksi AI
-      final result = await CycleService.saveMandatoryData(
-        idUser: user.idUser!,
-        lastPeriodDate: lastPeriodFormatted,
-        previousPeriodDate: previousPeriodFormatted,
-        cycleLengthDays: 28,  // Nilai default sementara (akan diupdate AI nanti)
-        periodDurationDays: int.parse(_periodDurationController.text),
-        painLevel: _painLevel.toInt(),
-        stressLevel: _stressLevel.toInt(),
-        sleepHours: _sleepHours,
-        moodLevel: _moodLevel.toInt(),
-      );
-
-      if (result['success'] == true) {
-        _savedCycleMongoId = result['cycleId'];
-
-        if (mounted) {
-          setState(() => _isLoading = false);
-          _showOptionalFormDialog();
-        }
-      } else {
-        throw Exception(result['message'] ?? 'Gagal menyimpan data');
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal menyimpan data: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+  print('📝 _saveAndContinue() dipanggil');
+  
+  if (!_formKey.currentState!.validate()) {
+    print('❌ Form tidak valid');
+    return;
+  }
+  
+  // Validasi tanggal harus diisi
+  if (_lastPeriodDate == null) {
+    print('❌ Tanggal haid terakhir belum dipilih');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tanggal haid terakhir wajib diisi'), backgroundColor: AppColors.error),
+    );
+    return;
   }
 
+  setState(() => _isLoading = true);
+
+  try {
+    final user = await AuthService.getCurrentUser();
+    print('👤 User saat ini: ${user?.idUser} - ${user?.name}');
+
+    if (user == null || user.idUser == null) {
+      throw Exception('User tidak ditemukan. Silakan login kembali.');
+    }
+
+    String lastPeriodFormatted = DateFormat(AppConstants.dateFormatApi).format(_lastPeriodDate!);
+    String? previousPeriodFormatted = _previousPeriodDate != null
+        ? DateFormat(AppConstants.dateFormatApi).format(_previousPeriodDate!)
+        : null;
+    
+    print('📤 Menyimpan data siklus...');
+    print('   last_period_date: $lastPeriodFormatted');
+    print('   previous_period_date: $previousPeriodFormatted');
+    print('   pain_level: ${_painLevel.toInt()}');
+    print('   stress_level: ${_stressLevel.toInt()}');
+    print('   sleep_hours: $_sleepHours');
+    print('   mood_level: ${_moodLevel.toInt()}');
+
+    // Gunakan saveCycle (endpoint /api/mobile/cycle)
+    final result = await CycleService.saveCycle(
+      lastPeriodDate: lastPeriodFormatted,
+      previousPeriodDate: previousPeriodFormatted,
+      cycleLengthDays: 28,  // Nilai default sementara
+      painLevel: _painLevel.toInt(),
+      stressScoreCycle: _stressLevel.toInt(),
+      sleepHoursCycle: _sleepHours,
+      moodScore: _moodLevel.toInt(),
+    );
+
+    print('📊 Hasil save: ${result['success']}');
+    print('   Data: ${result['data']}');
+
+    if (result['success'] == true) {
+      // Ambil cycleId dari response
+      final cycleData = result['data'];
+      
+      // 🔴 PRIORITAS: Cari 'id' (MongoDB ObjectId) dulu!
+      _savedCycleMongoId = cycleData['id']?.toString() ?? 
+                           cycleData['id_cycle']?.toString() ?? 
+                           cycleData['_id']?.toString();
+      
+      print('✅ Cycle ID: $_savedCycleMongoId');
+      print('   Full response: $cycleData');
+      
+      // Simpan ke local
+      final prefs = await SharedPreferences.getInstance();
+      if (_savedCycleMongoId != null) {
+        await prefs.setString('latest_cycle_id', _savedCycleMongoId!);
+        print('✅ Cycle ID saved to SharedPreferences: $_savedCycleMongoId');
+      } else {
+        print('⚠️ WARNING: Cycle ID is NULL! Tidak bisa menyimpan ke local.');
+      }
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        // Tampilkan dialog pilihan
+        _showOptionalFormDialog();
+      }
+    } else {
+      throw Exception(result['message'] ?? 'Gagal menyimpan data');
+    }
+  } catch (e) {
+    print('❌ Error: $e');
+    setState(() => _isLoading = false);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan data: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+}
+
   void _showOptionalFormDialog() {
+    print('📱 Menampilkan dialog pilihan');
+    print('   cycleId: $_savedCycleMongoId');
+    print('   lastPeriodDate: $_lastPeriodDate');
+    print('   periodDuration: ${_periodDurationController.text}');
+    
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Lengkapi Data?'),
         content: const Text(
           'Kamu bisa melengkapi data tambahan untuk prediksi yang lebih akurat. '
@@ -192,8 +233,9 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              _saveCycleIdToLocal();
+              print('❌ User memilih LEWATI');
+              Navigator.pop(dialogContext);
+              // Navigasi ke Dashboard
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
@@ -208,28 +250,51 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
-              if (mounted && _savedCycleMongoId != null && _lastPeriodDate != null) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => OptionalFormScreen(
-                      cycleId: _savedCycleMongoId!,
-                      lastPeriodDate: _lastPeriodDate!,
-                      previousPeriodDate: _previousPeriodDate,
-                      cycleLengthDays: 28,  // Default sementara
-                      periodDurationDays: int.parse(_periodDurationController.text),
-                      painLevel: _painLevel.toInt(),
-                      stressLevel: _stressLevel.toInt(),
-                      sleepHours: _sleepHours,
-                      moodLevel: _moodLevel.toInt(),
+              print('✅ User memilih ISI SEKARANG');
+              Navigator.pop(dialogContext); // Tutup dialog dulu
+              
+              // Beri sedikit delay agar dialog benar-benar tertutup
+              Future.delayed(const Duration(milliseconds: 150), () {
+                if (mounted && _savedCycleMongoId != null && _lastPeriodDate != null) {
+                  print('🚀 Navigasi ke OptionalFormScreen');
+                  print('   cycleId: $_savedCycleMongoId');
+                  print('   lastPeriodDate: $_lastPeriodDate');
+                  
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => OptionalFormScreen(
+                        cycleId: _savedCycleMongoId!,
+                        lastPeriodDate: _lastPeriodDate!,
+                        previousPeriodDate: _previousPeriodDate,
+                        cycleLengthDays: 28,
+                        periodDurationDays: int.tryParse(_periodDurationController.text) ?? 5,
+                        painLevel: _painLevel.toInt(),
+                        stressLevel: _stressLevel.toInt(),
+                        sleepHours: _sleepHours,
+                        moodLevel: _moodLevel.toInt(),
+                      ),
                     ),
-                  ),
-                );
-              }
+                  ).then((_) {
+                    print('🔙 Kembali dari OptionalFormScreen');
+                  });
+                } else {
+                  print('❌ Gagal navigasi: parameter null');
+                  print('   cycleId: $_savedCycleMongoId');
+                  print('   lastPeriodDate: $_lastPeriodDate');
+                  
+                  // Fallback: langsung ke Dashboard
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DashboardScreen(),
+                    ),
+                  );
+                }
+              });
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.pink,
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -238,13 +303,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         ],
       ),
     );
-  }
-
-  void _saveCycleIdToLocal() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_savedCycleMongoId != null) {
-      await prefs.setString('latest_cycle_id', _savedCycleMongoId!);
-    }
   }
 
   // ============================================
@@ -256,7 +314,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Data Siklus Haid'),
-        backgroundColor: Colors.pink,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -265,11 +323,11 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.pink.shade50, Colors.white],
+            colors: [AppColors.primaryLight, Colors.white],
           ),
         ),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Form(
             key: _formKey,
             child: Column(
@@ -277,17 +335,17 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               children: [
                 // Header
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   decoration: BoxDecoration(
-                    color: Colors.pink.shade100.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(20),
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(AppSpacing.lg),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(AppSpacing.sm),
                         decoration: BoxDecoration(
-                          color: Colors.pink.shade400,
+                          color: AppColors.primary,
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -296,7 +354,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                           size: 30,
                         ),
                       ),
-                      const SizedBox(width: 15),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,9 +362,9 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                             const Text(
                               'Data Wajib',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: AppFontSize.lg,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.pink,
+                                color: AppColors.primary,
                               ),
                             ),
                             Text(
@@ -320,14 +378,14 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: AppSpacing.xl),
 
                 // ============================================
                 // SECTION 1: DATA TANGGAL (WAJIB)
                 // ============================================
                 
-                const Text('📅 Data Tanggal', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
+                const Text('📅 Data Tanggal', style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
+                const SizedBox(height: AppSpacing.sm),
 
                 TextFormField(
                   controller: _lastPeriodController,
@@ -338,8 +396,8 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   decoration: InputDecoration(
                     labelText: 'Tanggal Haid Terakhir *',
                     hintText: 'Pilih tanggal',
-                    prefixIcon: Icon(Icons.calendar_today, color: Colors.pink.shade300),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                    prefixIcon: Icon(Icons.calendar_today, color: AppColors.primary),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                     filled: true,
                     fillColor: Colors.white,
                   ),
@@ -349,7 +407,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   },
                 ),
 
-                const SizedBox(height: 15),
+                const SizedBox(height: AppSpacing.md),
 
                 TextFormField(
                   controller: _previousPeriodController,
@@ -360,37 +418,37 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   decoration: InputDecoration(
                     labelText: 'Tanggal Haid Sebelumnya',
                     hintText: 'Pilih tanggal (opsional)',
-                    prefixIcon: Icon(Icons.calendar_month, color: Colors.pink.shade300),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                    prefixIcon: Icon(Icons.calendar_month, color: AppColors.primary),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                     filled: true,
                     fillColor: Colors.white,
-                    helperText: 'Kosongkan jika tidak tahu',
+                    helperText: 'Kosongkan jika tidak tahu (akan menggunakan default 28 hari)',
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: AppSpacing.xl),
 
                 // ============================================
                 // SECTION 2: TINGKAT NYERI (WAJIB)
                 // ============================================
                 
-                const Text('💢 Tingkat Nyeri', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 5),
-                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 10),
+                const Text('💢 Tingkat Nyeri', style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
+                const SizedBox(height: AppSpacing.xs),
+                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: AppFontSize.sm, color: Colors.grey)),
+                const SizedBox(height: AppSpacing.sm),
 
                 Card(
                   elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(AppSpacing.md),
                     child: Column(
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Tidak sakit', style: TextStyle(fontSize: 12)),
-                            const Text('Sangat sakit', style: TextStyle(fontSize: 12)),
+                            const Text('Tidak sakit', style: TextStyle(fontSize: AppFontSize.sm)),
+                            const Text('Sangat sakit', style: TextStyle(fontSize: AppFontSize.sm)),
                           ],
                         ),
                         Slider(
@@ -398,7 +456,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                           min: 0,
                           max: 10,
                           divisions: 10,
-                          activeColor: Colors.pink,
+                          activeColor: AppColors.primary,
                           label: _painLevel.round().toString(),
                           onChanged: (value) {
                             setState(() => _painLevel = value);
@@ -406,14 +464,14 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         ),
                         Align(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                             decoration: BoxDecoration(
-                              color: Colors.pink.shade100,
-                              borderRadius: BorderRadius.circular(20),
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(AppSpacing.lg),
                             ),
                             child: Text(
                               _getPainLabel(_painLevel),
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink.shade700),
+                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
                             ),
                           ),
                         ),
@@ -422,29 +480,29 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: AppSpacing.xl),
 
                 // ============================================
                 // SECTION 3: TINGKAT STRES (WAJIB)
                 // ============================================
                 
-                const Text('😫 Tingkat Stres', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 5),
-                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 10),
+                const Text('😫 Tingkat Stres', style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
+                const SizedBox(height: AppSpacing.xs),
+                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: AppFontSize.sm, color: Colors.grey)),
+                const SizedBox(height: AppSpacing.sm),
 
                 Card(
                   elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(AppSpacing.md),
                     child: Column(
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Rileks', style: TextStyle(fontSize: 12)),
-                            const Text('Sangat stres', style: TextStyle(fontSize: 12)),
+                            const Text('Rileks', style: TextStyle(fontSize: AppFontSize.sm)),
+                            const Text('Sangat stres', style: TextStyle(fontSize: AppFontSize.sm)),
                           ],
                         ),
                         Slider(
@@ -457,10 +515,10 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         ),
                         Align(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                             decoration: BoxDecoration(
                               color: Colors.orange.shade100,
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(AppSpacing.lg),
                             ),
                             child: Text(
                               _getStressLabel(_stressLevel),
@@ -473,22 +531,22 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: AppSpacing.xl),
 
                 // ============================================
                 // SECTION 4: JAM TIDUR (WAJIB)
                 // ============================================
                 
-                const Text('😴 Rata-rata Jam Tidur per Hari', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 5),
-                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 10),
+                const Text('😴 Rata-rata Jam Tidur per Hari', style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold)),
+                const SizedBox(height: AppSpacing.xs),
+                const Text('Data ini WAJIB untuk prediksi', style: TextStyle(fontSize: AppFontSize.sm, color: Colors.grey)),
+                const SizedBox(height: AppSpacing.sm),
 
                 Card(
                   elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(AppSpacing.md),
                     child: Column(
                       children: [
                         Row(
@@ -504,10 +562,10 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                               decoration: BoxDecoration(
                                 color: Colors.teal.shade100,
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(AppSpacing.lg),
                               ),
                               child: Text(
                                 '${_sleepHours.toStringAsFixed(1)} jam',
@@ -521,17 +579,17 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: AppSpacing.lg),
 
                 // ============================================
                 // SECTION 5: DATA OPSIONAL
                 // ============================================
                 
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
                     color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: BorderRadius.circular(AppSpacing.md),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,22 +597,22 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                       Row(
                         children: [
                           Icon(Icons.star, color: Colors.amber.shade600, size: 18),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: AppSpacing.xs),
                           Text(
                             'Data Opsional (Isi untuk akurasi lebih baik)',
                             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade700),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: AppSpacing.md),
                       
                       // Mood Level
-                      Text('😊 Mood Secara Umum', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const Text('😊 Mood Secara Umum', style: TextStyle(fontWeight: FontWeight.w500)),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Sangat buruk', style: TextStyle(fontSize: 12)),
-                          const Text('Luar biasa', style: TextStyle(fontSize: 12)),
+                          const Text('Sangat buruk', style: TextStyle(fontSize: AppFontSize.sm)),
+                          const Text('Luar biasa', style: TextStyle(fontSize: AppFontSize.sm)),
                         ],
                       ),
                       Slider(
@@ -568,11 +626,11 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                       Align(
                         child: Text(
                           _getMoodLabel(_moodLevel),
-                          style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+                          style: TextStyle(fontSize: AppFontSize.sm, color: Colors.green.shade700),
                         ),
                       ),
                       
-                      const SizedBox(height: 15),
+                      const SizedBox(height: AppSpacing.md),
                       
                       // Lama Haid (Opsional)
                       TextFormField(
@@ -582,7 +640,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                           labelText: 'Lama Haid (hari)',
                           hintText: 'Contoh: 5',
                           prefixIcon: Icon(Icons.timer, color: Colors.blue.shade300),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.sm)),
                           filled: true,
                           fillColor: Colors.white,
                         ),
@@ -591,31 +649,31 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: AppSpacing.lg),
 
                 // Info box
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(AppSpacing.sm),
                   decoration: BoxDecoration(
-                    color: Colors.pink.shade50,
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(AppSpacing.sm),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.pink.shade700, size: 20),
-                      const SizedBox(width: 10),
+                      Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+                      const SizedBox(width: AppSpacing.sm),
                       const Expanded(
                         child: Text(
                           'Panjang siklus akan dihitung OTOMATIS oleh sistem atau diprediksi AI.\n'
                           'Anda TIDAK perlu menginputnya.',
-                          style: TextStyle(fontSize: 12),
+                          style: TextStyle(fontSize: AppFontSize.sm),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: AppSpacing.xl),
 
                 // Submit Button
                 SizedBox(
@@ -624,15 +682,15 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _saveAndContinue,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.pink,
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
                             'Simpan & Lanjutkan',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold),
                           ),
                   ),
                 ),
