@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:menstrual_app/services/auth_service.dart';
 import 'package:menstrual_app/screens/auth/reset_password_screen.dart';
@@ -17,14 +18,44 @@ class VerifyOtpScreen extends StatefulWidget {
 }
 
 class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
-  final List<TextEditingController> _otpControllers = List.generate(6, (index) => TextEditingController());
+  final List<TextEditingController> _otpControllers = List.generate(
+    6,
+    (index) => TextEditingController(),
+  );
   final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
-  
-  bool _isLoading = false;
+
+  bool _isVerifying = false;
+  bool _isResending = false;
   String _errorMessage = '';
+  int _resendCountdown = 56;
+  bool _canResend = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted && _resendCountdown > 0) {
+        setState(() {
+          _resendCountdown--;
+        });
+      } else if (mounted && _resendCountdown == 0) {
+        timer.cancel();
+        setState(() {
+          _canResend = true;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _timer?.cancel();
     for (var controller in _otpControllers) {
       controller.dispose();
     }
@@ -44,7 +75,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     } else if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
-    
+
     setState(() {
       _errorMessage = '';
     });
@@ -59,74 +90,104 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     }
 
     setState(() {
-      _isLoading = true;
+      _isVerifying = true;
       _errorMessage = '';
     });
 
-    final result = await AuthService.verifyResetOtp(
-      email: widget.email,
-      otp: _otpCode,
-    );
+    try {
+      final result = await AuthService.verifyResetOtp(
+        email: widget.email,
+        otp: _otpCode,
+      );
 
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (mounted) {
-      if (result['success'] == true) {
-        // Navigate ke halaman reset password
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ResetPasswordScreen(
-              email: widget.email,
-              resetToken: result['reset_token'],
+      if (mounted) {
+        if (result['success'] == true) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResetPasswordScreen(
+                email: widget.email,
+                resetToken: result['reset_token'],
+              ),
             ),
-          ),
-        );
-      } else {
+          );
+        } else {
+          setState(() {
+            _errorMessage = result['message'];
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage = result['message'];
+          _errorMessage = 'Gagal terhubung ke server. Periksa koneksi Anda.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
         });
       }
     }
   }
 
-  void _resendOtp() async {
+  Future<void> _resendOtp() async {
+    if (!_canResend) return;
+
     setState(() {
-      _isLoading = true;
+      _isResending = true;
       _errorMessage = '';
+      _canResend = false;
+      _resendCountdown = 56;
     });
 
-    final result = await AuthService.forgotPassword(
-      email: widget.email,
-    );
+    try {
+      final result = await AuthService.forgotPassword(email: widget.email);
 
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (mounted) {
-      if (result['success'] == true) {
+      if (mounted) {
+        if (result['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Kode OTP baru telah dikirim'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          for (var controller in _otpControllers) {
+            controller.clear();
+          }
+          _focusNodes[0].requestFocus();
+          _startCountdown();
+        } else {
+          setState(() {
+            _canResend = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _canResend = true;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Kode OTP baru telah dikirim'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        // Clear OTP fields
-        for (var controller in _otpControllers) {
-          controller.clear();
-        }
-        _focusNodes[0].requestFocus();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message']),
+            content: Text('Gagal mengirim ulang kode. Coba lagi nanti.'),
             backgroundColor: Colors.red,
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResending = false;
+        });
       }
     }
   }
@@ -134,169 +195,247 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.pink.shade50,
-      appBar: AppBar(
-        title: const Text('Verifikasi Kode'),
-        backgroundColor: Colors.pink,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: Colors.pink,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 20),
-              
-              // Header
-              Center(
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.pink.shade100,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.verified_user,
-                    size: 50,
-                    color: Colors.pink.shade400,
-                  ),
-                ),
-              ),
-              
-              const SizedBox(height: 24),
-              
-              const Text(
-                'Verifikasi Kode OTP',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.pink,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              
-              const SizedBox(height: 8),
-              
-              Text(
-                'Kami telah mengirimkan kode verifikasi ke\n${widget.email}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              
-              const SizedBox(height: 32),
-              
-              // OTP Input Fields
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(6, (index) => SizedBox(
-                  width: 50,
-                  child: TextFormField(
-                    controller: _otpControllers[index],
-                    focusNode: _focusNodes[index],
-                    textAlign: TextAlign.center,
-                    keyboardType: TextInputType.number,
-                    maxLength: 1,
-                    decoration: InputDecoration(
-                      counterText: '',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                    onChanged: (value) => _onOtpChanged(index, value),
-                  ),
-                )),
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Error message
-              if (_errorMessage.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline, color: Colors.red.shade700, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _errorMessage,
-                          style: TextStyle(color: Colors.red.shade700, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              
-              const SizedBox(height: 24),
-              
-              // Verify Button
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyOtp,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.pink,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text(
-                          'Verifikasi',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                ),
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Resend OTP
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Tidak menerima kode? ',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                  GestureDetector(
-                    onTap: _resendOtp,
-                    child: const Text(
-                      'Kirim Ulang',
-                      style: TextStyle(
-                        color: Colors.pink,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(25),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
                   ),
                 ],
               ),
-            ],
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 20),
+
+                    // Header Icon
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: Colors.pink.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.verified_user,
+                        size: 35,
+                        color: Colors.pink.shade400,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Title
+                    const Text(
+                      'Verifikasi Email Anda',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.pink,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Subtitle
+                    Text(
+                      'Kami telah mengirimkan kode verifikasi ke ${widget.email}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // OTP Input Fields
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: List.generate(
+                        6,
+                        (index) => SizedBox(
+                          width: 50,
+                          height: 55,
+                          child: TextFormField(
+                            controller: _otpControllers[index],
+                            focusNode: _focusNodes[index],
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            textInputAction: index == 5
+                                ? TextInputAction.done
+                                : TextInputAction.next,
+                            maxLength: 1,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            decoration: InputDecoration(
+                              counterText: '',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Colors.grey.shade300,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Colors.grey.shade300,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Colors.pink.shade300,
+                                  width: 2,
+                                ),
+                              ),
+                              filled: true,
+                              fillColor: Colors.pink.shade50,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
+                            ),
+                            onChanged: (value) => _onOtpChanged(index, value),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Error message
+                    if (_errorMessage.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              color: Colors.red.shade700,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _errorMessage,
+                                style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    const SizedBox(height: 30),
+
+                    // Verify Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: (_isVerifying || _isResending)
+                            ? null
+                            : _verifyOtp,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.pink,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                          disabledBackgroundColor: Colors.grey.shade400,
+                        ),
+                        child: _isVerifying
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Verifikasi',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Resend OTP Section
+                    Column(
+                      children: [
+                        Text(
+                          'Belum menerima kode?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        if (_isResending)
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.pink,
+                            ),
+                          )
+                        else if (!_canResend)
+                          Text(
+                            'Kirim ulang dalam ${_resendCountdown}s',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade500,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          )
+                        else
+                          GestureDetector(
+                            onTap: _resendOtp,
+                            child: Text(
+                              'Kirim ulang',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.pink.shade700,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 30),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

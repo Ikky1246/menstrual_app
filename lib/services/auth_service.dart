@@ -13,19 +13,20 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print('🔐 Mencoba login user ke: ${AppConstants.baseUrl}/api/mobile/login');
-      
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/login'),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
-      ).timeout(AppDurations.apiTimeout);
+      print(
+        '🔐 Mencoba login user ke: ${AppConstants.baseUrl}/api/mobile/login',
+      );
+
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/login'),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({'email': email, 'password': password}),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       print('📊 Response status: ${response.statusCode}');
       print('📦 Response body: ${response.body}');
@@ -35,34 +36,34 @@ class AuthService {
       if (response.statusCode == 200 && data['success'] == true) {
         final userData = data['data']['user'];
         final token = data['data']['token'];
-        
+
         final user = User.fromJson(userData);
-        
+
         await _saveUserData(user, token);
-        
+
         // Simpan email dan password untuk refresh token
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_email', email);
         await prefs.setString('user_password', password);
         print('✅ Email dan password disimpan untuk refresh token');
-        
+
         return {
-          'success': true, 
+          'success': true,
           'user': user,
           'token': token,
-          'message': data['message'] ?? 'Login berhasil'
+          'message': data['message'] ?? 'Login berhasil',
         };
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Email atau password salah'
+          'message': data['message'] ?? 'Email atau password salah',
         };
       }
     } catch (e) {
       print('❌ Error login: $e');
       return {
         'success': false,
-        'message': 'Gagal terhubung ke server. Pastikan Laravel berjalan'
+        'message': 'Gagal terhubung ke server. Pastikan Laravel berjalan',
       };
     }
   }
@@ -76,20 +77,24 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print('🌐 Mengirim request register ke: ${AppConstants.baseUrl}/api/mobile/register');
-      
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/register'),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: jsonEncode({
-          'name': name,
-          'email': email,
-          'password': password,
-        }),
-      ).timeout(AppDurations.apiTimeout);
+      print(
+        '🌐 Mengirim request register ke: ${AppConstants.baseUrl}/api/mobile/register',
+      );
+
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/register'),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({
+              'name': name,
+              'email': email,
+              'password': password,
+            }),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       print('📊 Status code: ${response.statusCode}');
       print('📦 Response body: ${response.body}');
@@ -105,7 +110,7 @@ class AuthService {
         };
       } else {
         String errorMessage = data['message'] ?? 'Registrasi gagal';
-        
+
         if (data['errors'] != null) {
           final errors = data['errors'] as Map;
           if (errors.containsKey('email')) {
@@ -116,17 +121,14 @@ class AuthService {
             errorMessage = errors['password'][0];
           }
         }
-        
-        return {
-          'success': false,
-          'message': errorMessage
-        };
+
+        return {'success': false, 'message': errorMessage};
       }
     } catch (e) {
       print('💥 Connection error: $e');
       return {
         'success': false,
-        'message': 'Gagal terhubung ke server. Pastikan Laravel berjalan'
+        'message': 'Gagal terhubung ke server. Pastikan Laravel berjalan',
       };
     }
   }
@@ -140,31 +142,30 @@ class AuthService {
     String? password,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'email': email,
-          'otp': otp,
-        }),
-      ).timeout(AppDurations.apiTimeout);
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({'email': email, 'otp': otp}),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      
+
       if (response.statusCode == 200 && data['success'] == true) {
         final userData = data['data']['user'];
         final token = data['data']['token'];
-        
+
         final user = User.fromJson(userData);
         await _saveUserData(user, token);
-        
+
         if (password != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('user_email', email);
           await prefs.setString('user_password', password);
           print('✅ Email dan password disimpan untuk refresh token');
         }
-        
+
         return {
           'success': true,
           'message': data['message'],
@@ -174,33 +175,30 @@ class AuthService {
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Verifikasi gagal'
+          'message': data['message'] ?? 'Verifikasi gagal',
         };
       }
     } catch (e) {
       print('❌ Verify Email OTP error: $e');
-      return {
-        'success': false,
-        'message': 'Gagal verifikasi OTP'
-      };
+      return {'success': false, 'message': 'Gagal verifikasi OTP'};
     }
   }
 
   // ==============================================
   // RESEND OTP
   // ==============================================
-  static Future<Map<String, dynamic>> resendOtp({
-    required String email,
-  }) async {
+  static Future<Map<String, dynamic>> resendOtp({required String email}) async {
     try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/resend-otp'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'email': email}),
-      ).timeout(AppDurations.apiTimeout);
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/resend-otp'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({'email': email}),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      
+
       if (response.statusCode == 200 && data['success'] == true) {
         return {
           'success': true,
@@ -210,15 +208,12 @@ class AuthService {
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Gagal mengirim ulang OTP'
+          'message': data['message'] ?? 'Gagal mengirim ulang OTP',
         };
       }
     } catch (e) {
       print('❌ Resend OTP error: $e');
-      return {
-        'success': false,
-        'message': 'Gagal mengirim ulang OTP'
-      };
+      return {'success': false, 'message': 'Gagal mengirim ulang OTP'};
     }
   }
 
@@ -232,22 +227,24 @@ class AuthService {
     try {
       if (token != null) {
         print('🚪 Logout user dari: ${AppConstants.baseUrl}/api/mobile/logout');
-        
-        await http.post(
-          Uri.parse('${AppConstants.baseUrl}/api/mobile/logout'),
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": "Bearer $token",
-          },
-        ).timeout(AppDurations.apiTimeout);
+
+        await http
+            .post(
+              Uri.parse('${AppConstants.baseUrl}/api/mobile/logout'),
+              headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": "Bearer $token",
+              },
+            )
+            .timeout(AppDurations.apiTimeout);
       }
     } catch (e) {
       print('❌ Error logout: $e');
     } finally {
       await _clearUserData();
     }
-    
+
     return {'success': true, 'message': 'Logout berhasil'};
   }
 
@@ -257,9 +254,9 @@ class AuthService {
   static Future<User?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString(AppConstants.keyUser);
-    
+
     if (userJson == null) return null;
-    
+
     try {
       final userMap = jsonDecode(userJson);
       return User.fromMap(userMap);
@@ -279,33 +276,35 @@ class AuthService {
         return {'success': false, 'message': 'Token tidak ditemukan'};
       }
 
-      final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
-        headers: {
-          "Accept": "application/json",
-          "Authorization": "Bearer $token",
-        },
-      ).timeout(AppDurations.apiTimeout);
+      final response = await http
+          .get(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
+            headers: {
+              "Accept": "application/json",
+              "Authorization": "Bearer $token",
+            },
+          )
+          .timeout(AppDurations.apiTimeout);
 
       print('📊 Profile response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         if (data['success'] == true && data['data'] != null) {
           final userData = data['data']['user'];
           final token = await getToken();
           final user = User.fromJson(userData);
           await _saveUserData(user, token!);
-          
+
           return {
             'success': true,
             'user': user,
-            'message': 'Berhasil mengambil profil'
+            'message': 'Berhasil mengambil profil',
           };
         }
       }
-      
+
       return {'success': false, 'message': 'Gagal mengambil profil'};
     } catch (e) {
       print('❌ Error get profile: $e');
@@ -336,30 +335,32 @@ class AuthService {
       if (weightKg != null) payload['weight_kg'] = weightKg;
       if (heightCm != null) payload['height_cm'] = heightCm;
 
-      final response = await http.put(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(payload),
-      ).timeout(AppDurations.apiTimeout);
+      final response = await http
+          .put(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "Authorization": "Bearer $token",
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       final responseData = jsonDecode(response.body);
       print('📊 Update response: ${response.statusCode}');
 
       if (response.statusCode == 200 && responseData['success'] == true) {
         await getProfile();
-        
+
         return {
           'success': true,
-          'message': responseData['message'] ?? 'Profile berhasil diupdate'
+          'message': responseData['message'] ?? 'Profile berhasil diupdate',
         };
       } else {
         return {
           'success': false,
-          'message': responseData['message'] ?? 'Gagal update profil'
+          'message': responseData['message'] ?? 'Gagal update profil',
         };
       }
     } catch (e) {
@@ -375,14 +376,16 @@ class AuthService {
     required String email,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/forgot-password'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'email': email}),
-      ).timeout(AppDurations.apiTimeout);
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/forgot-password'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({'email': email}),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      
+
       if (response.statusCode == 200 && data['success'] == true) {
         return {
           'success': true,
@@ -392,15 +395,12 @@ class AuthService {
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Gagal mengirim kode OTP'
+          'message': data['message'] ?? 'Gagal mengirim kode OTP',
         };
       }
     } catch (e) {
       print('❌ Forgot password error: $e');
-      return {
-        'success': false,
-        'message': 'Gagal terhubung ke server'
-      };
+      return {'success': false, 'message': 'Gagal terhubung ke server'};
     }
   }
 
@@ -412,17 +412,16 @@ class AuthService {
     required String otp,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp-reset'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'email': email,
-          'otp': otp,
-        }),
-      ).timeout(AppDurations.apiTimeout);
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp-reset'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({'email': email, 'otp': otp}),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      
+
       if (response.statusCode == 200 && data['success'] == true) {
         return {
           'success': true,
@@ -432,15 +431,12 @@ class AuthService {
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Kode OTP tidak valid'
+          'message': data['message'] ?? 'Kode OTP tidak valid',
         };
       }
     } catch (e) {
       print('❌ Verify reset OTP error: $e');
-      return {
-        'success': false,
-        'message': 'Gagal verifikasi OTP'
-      };
+      return {'success': false, 'message': 'Gagal verifikasi OTP'};
     }
   }
 
@@ -454,36 +450,32 @@ class AuthService {
     required String passwordConfirmation,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/reset-password'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'email': email,
-          'reset_token': resetToken,
-          'password': password,
-          'password_confirmation': passwordConfirmation,
-        }),
-      ).timeout(AppDurations.apiTimeout);
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/api/mobile/reset-password'),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              'email': email,
+              'reset_token': resetToken,
+              'password': password,
+              'password_confirmation': passwordConfirmation,
+            }),
+          )
+          .timeout(AppDurations.apiTimeout);
 
       final data = jsonDecode(response.body);
-      
+
       if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'message': data['message'],
-        };
+        return {'success': true, 'message': data['message']};
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Gagal mereset password'
+          'message': data['message'] ?? 'Gagal mereset password',
         };
       }
     } catch (e) {
       print('❌ Reset password error: $e');
-      return {
-        'success': false,
-        'message': 'Gagal terhubung ke server'
-      };
+      return {'success': false, 'message': 'Gagal terhubung ke server'};
     }
   }
 
@@ -495,16 +487,16 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString('user_email');
       final password = prefs.getString('user_password');
-      
+
       if (email == null || password == null) {
         print('❌ Refresh token gagal: email/password tidak tersimpan');
         return false;
       }
-      
+
       print('🔄 Mencoba refresh token untuk: $email');
-      
+
       final result = await login(email: email, password: password);
-      
+
       if (result['success'] == true) {
         print('✅ Refresh token berhasil!');
         return true;
@@ -540,10 +532,10 @@ class AuthService {
   // ==============================================
   static Future<void> _saveUserData(User user, String token) async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     await prefs.setString(AppConstants.keyToken, token);
     await prefs.setString(AppConstants.keyUser, jsonEncode(user.toMap()));
-    
+
     print('✅ Token dan user data saved');
   }
 
