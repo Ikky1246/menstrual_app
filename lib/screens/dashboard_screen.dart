@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:menstrual_app/screens/prediction_screen.dart';
 import 'package:menstrual_app/screens/notification_screen.dart';
-import 'package:menstrual_app/screens/profile_screen.dart'; // ← Tambahan
+import 'package:menstrual_app/screens/profile_screen.dart';
+import 'package:menstrual_app/screens/daily_note_screen.dart'; // ← Tambahkan ini
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,7 +16,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime _selectedDate = DateTime(2026, 5);
   final DateFormat _dateFormat = DateFormat('MMMM yyyy', 'id');
 
-  // Data dummy
   final Map<DateTime, Map<String, dynamic>> _cycleData = {
     DateTime(2026, 5, 1): {'type': 'prediction', 'intensity': 'light'},
     DateTime(2026, 5, 2): {'type': 'menstruation', 'intensity': 'heavy'},
@@ -50,24 +50,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined, color: Colors.pink),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const NotificationScreen(),
-                ),
-              );
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationScreen()),
+            ),
           ),
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.person_outline, color: Colors.pink),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -76,7 +70,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Cycle Info Cards
+            // ... (semua bagian di atas tetap sama)
             Row(
               children: [
                 Expanded(
@@ -99,7 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 24),
 
-            // Big Cycle Day Circle
+            // Big Circle (tetap)
             Container(
               width: 180,
               height: 180,
@@ -131,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 16),
 
-            // Prediction
+            // Prediction (tetap)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
@@ -183,7 +177,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 24),
 
-            // Calendar
+            // Calendar (tetap)
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -265,10 +259,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 30),
 
+            // ✅ TOMBOL CATATAN HARIAN YANG SUDAH DIPERBAIKI
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DailyNoteScreen(),
+                    ),
+                  );
+                },
                 icon: const Icon(Icons.edit_note),
                 label: const Text(
                   'Catatan Harian',
@@ -290,6 +292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // Widget pendukung lainnya (tetap sama)
   Widget _buildInfoCard({
     required String title,
     required String value,
@@ -328,7 +331,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildCalendarGrid() {
     final days = List.generate(31, (index) => index + 1);
-
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -377,7 +379,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _LegendItem extends StatelessWidget {
   final Color color;
   final String label;
-
   const _LegendItem({required this.color, required this.label, super.key});
 
   @override
