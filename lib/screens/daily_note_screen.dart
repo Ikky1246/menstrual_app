@@ -1,5 +1,4 @@
 // lib/screens/daily_note_screen.dart
-// Halaman catatan harian (mood, gejala, catatan)
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -21,19 +20,19 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   int _moodLevel = 5;
   bool _isLoading = false;
   bool _isSaving = false;
-  
+
   // Gejala yang umum
   final List<Map<String, dynamic>> _symptoms = [
-    {'name': 'Kram perut', 'icon': Icons.crisis_alert, 'selected': false},
-    {'name': 'Sakit kepala', 'icon': Icons.sick, 'selected': false},
-    {'name': 'Lelah', 'icon': Icons.battery_alert, 'selected': false},
-    {'name': 'Kembung', 'icon': Icons.air, 'selected': false},
-    {'name': 'Payudara nyeri', 'icon': Icons.favorite, 'selected': false},
-    {'name': 'Jerawat', 'icon': Icons.face, 'selected': false},
-    {'name': 'Mood swing', 'icon': Icons.mood_bad, 'selected': false},
-    {'name': 'Sakit punggung', 'icon': Icons.back_hand, 'selected': false},
-    {'name': 'Mual', 'icon': Icons.sick, 'selected': false},
-    {'name': 'Insomnia', 'icon': Icons.nightlight_round, 'selected': false},
+    {'name': 'Kram perut', 'selected': false},
+    {'name': 'Sakit kepala', 'selected': false},
+    {'name': 'Lelah', 'selected': false},
+    {'name': 'Kembung', 'selected': false},
+    {'name': 'Payudara nyeri', 'selected': false},
+    {'name': 'Jerawat', 'selected': false},
+    {'name': 'Mood swing', 'selected': false},
+    {'name': 'Sakit punggung', 'selected': false},
+    {'name': 'Mual', 'selected': false},
+    {'name': 'Insomnia', 'selected': false},
   ];
 
   @override
@@ -51,10 +50,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   }
 
   Future<void> _loadExistingNote() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     try {
       final result = await DailyNoteService.getNoteByDate(_selectedDate);
       if (result['success'] == true && result['note'] != null) {
@@ -62,8 +58,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
         setState(() {
           _moodLevel = note.moodLevel;
           _notesController.text = note.notes;
-          
-          // Update gejala yang dipilih
           for (var symptom in _symptoms) {
             symptom['selected'] = note.symptoms.contains(symptom['name']);
           }
@@ -72,9 +66,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
     } catch (e) {
       print('Error loading note: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -84,32 +76,15 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.primary,
-              onPrimary: Colors.white,
-              onSurface: Colors.grey.shade800,
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
-
     if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
+      setState(() => _selectedDate = picked);
       _loadExistingNote();
     }
   }
 
   Future<void> _saveNote() async {
-    setState(() {
-      _isSaving = true;
-    });
+    setState(() => _isSaving = true);
 
     final selectedSymptoms = _symptoms
         .where((s) => s['selected'] == true)
@@ -123,16 +98,14 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
       notes: _notesController.text,
     );
 
-    setState(() {
-      _isSaving = false;
-    });
+    setState(() => _isSaving = false);
 
     if (mounted) {
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Catatan berhasil disimpan 📝'),
-            backgroundColor: AppColors.success,
+            backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -141,7 +114,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message'] ?? 'Gagal menyimpan catatan'),
-            backgroundColor: AppColors.error,
+            backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -149,196 +122,221 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
     }
   }
 
+  String _getMoodEmoji(int value) {
+    if (value <= 2) return '😢';
+    if (value <= 4) return '☹️';
+    if (value <= 6) return '😐';
+    if (value <= 8) return '🙂';
+    return '😊';
+  }
+
   String _getMoodLabel(int value) {
-    if (value <= 2) return 'Sangat buruk 😢';
-    if (value <= 4) return 'Buruk ☹️';
-    if (value <= 6) return 'Biasa 😐';
-    if (value <= 8) return 'Baik 🙂';
-    return 'Sangat baik 😊';
+    if (value <= 2) return 'Sangat buruk';
+    if (value <= 4) return 'Buruk';
+    if (value <= 6) return 'Biasa';
+    if (value <= 8) return 'Baik';
+    return 'Luar biasa';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF8E8F0), // Soft pink background
       appBar: AppBar(
-        title: const Text('Catatan Harian'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.pink,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Catatan Harian',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today),
             onPressed: _selectDate,
-            tooltip: 'Pilih Tanggal',
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(child: CircularProgressIndicator(color: Colors.pink))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header Tanggal
+                  // Date Header
                   Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius: BorderRadius.circular(AppSpacing.md),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Row(
+                    child: Text(
+                      DateFormat(
+                        'EEEE, dd MMMM yyyy',
+                        'id',
+                      ).format(_selectedDate),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Mood Question
+                  const Text(
+                    '😊 Bagaimana perasaanmu hari ini?',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Mood Slider Card
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
                       children: [
-                        Icon(Icons.calendar_month, color: AppColors.primary),
-                        const SizedBox(width: AppSpacing.sm),
+                        Slider(
+                          value: _moodLevel.toDouble(),
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          activeColor: Colors.pink,
+                          inactiveColor: Colors.pink.shade100,
+                          onChanged: (value) {
+                            setState(() => _moodLevel = value.toInt());
+                          },
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text(
+                              'Sangat buruk',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                            Text('Luar biasa', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
                         Text(
-                          DateFormat('EEEE, dd MMMM yyyy', 'id').format(_selectedDate),
+                          _getMoodLabel(_moodLevel),
                           style: const TextStyle(
-                            fontSize: AppFontSize.md,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
+                            color: Colors.pink,
                           ),
+                        ),
+                        Text(
+                          _getMoodEmoji(_moodLevel),
+                          style: const TextStyle(fontSize: 42),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(height: 24),
 
-                  // Mood Section
-                  const Text(
-                    '😊 Bagaimana perasaanmu hari ini?',
-                    style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Sangat buruk', style: TextStyle(fontSize: AppFontSize.sm)),
-                              const Text('Luar biasa', style: TextStyle(fontSize: AppFontSize.sm)),
-                            ],
-                          ),
-                          Slider(
-                            value: _moodLevel.toDouble(),
-                            min: 1,
-                            max: 10,
-                            divisions: 9,
-                            activeColor: AppColors.primary,
-                            onChanged: (value) {
-                              setState(() {
-                                _moodLevel = value.toInt();
-                              });
-                            },
-                          ),
-                          Align(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
-                                borderRadius: BorderRadius.circular(AppSpacing.lg),
-                              ),
-                              child: Text(
-                                _getMoodLabel(_moodLevel),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: AppSpacing.xl),
-
-                  // Symptoms Section
+                  // Symptoms
                   const Text(
                     '🤕 Gejala yang dirasakan',
-                    style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Wrap(
-                        spacing: AppSpacing.sm,
-                        runSpacing: AppSpacing.sm,
-                        children: _symptoms.map((symptom) {
-                          return FilterChip(
-                            label: Text(symptom['name']),
-                            selected: symptom['selected'],
-                            onSelected: (selected) {
-                              setState(() {
-                                symptom['selected'] = selected;
-                              });
-                            },
-                            selectedColor: AppColors.primaryLight,
-                            backgroundColor: Colors.grey.shade100,
-                          );
-                        }).toList(),
-                      ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _symptoms.map((symptom) {
+                        final isSelected = symptom['selected'] as bool;
+                        return FilterChip(
+                          label: Text(symptom['name']),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() => symptom['selected'] = selected);
+                          },
+                          backgroundColor: Colors.grey.shade100,
+                          selectedColor: Colors.pink.shade50,
+                          checkmarkColor: Colors.pink,
+                          labelStyle: TextStyle(
+                            color: isSelected ? Colors.pink : Colors.black87,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
 
-                  const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(height: 24),
 
-                  // Notes Section
+                  // Additional Notes
                   const Text(
                     '📝 Catatan tambahan',
-                    style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.md)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: TextFormField(
-                        controller: _notesController,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText: 'Tulis catatanmu di sini...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppSpacing.sm),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: TextField(
+                      controller: _notesController,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        hintText: 'Tulis catatanmu di sini...',
+                        border: InputBorder.none,
+                        hintStyle: TextStyle(color: Colors.grey),
                       ),
                     ),
                   ),
 
-                  const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(height: 32),
 
                   // Save Button
                   SizedBox(
                     width: double.infinity,
-                    height: 55,
+                    height: 56,
                     child: ElevatedButton(
                       onPressed: _isSaving ? null : _saveNote,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: Colors.pink,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppSpacing.md),
+                          borderRadius: BorderRadius.circular(30),
                         ),
+                        elevation: 3,
                       ),
                       child: _isSaving
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
-                              'Simpan Catatan',
-                              style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold),
+                              'SIMPAN CATATAN',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                     ),
                   ),
