@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/daily_note_service.dart';
-import '../utils/constants.dart';
 
 class DailyNoteScreen extends StatefulWidget {
   final DateTime? initialDate;
@@ -21,7 +20,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   bool _isLoading = false;
   bool _isSaving = false;
 
-  // Gejala yang umum
   final List<Map<String, dynamic>> _symptoms = [
     {'name': 'Kram perut', 'selected': false},
     {'name': 'Sakit kepala', 'selected': false},
@@ -56,10 +54,11 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
       if (result['success'] == true && result['note'] != null) {
         final note = result['note'];
         setState(() {
-          _moodLevel = note.moodLevel;
-          _notesController.text = note.notes;
+          _moodLevel = note.moodLevel ?? 5;
+          _notesController.text = note.notes ?? '';
           for (var symptom in _symptoms) {
-            symptom['selected'] = note.symptoms.contains(symptom['name']);
+            symptom['selected'] =
+                note.symptoms?.contains(symptom['name']) ?? false;
           }
         });
       }
@@ -75,7 +74,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
     );
     if (picked != null && picked != _selectedDate) {
       setState(() => _selectedDate = picked);
@@ -84,6 +83,14 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   }
 
   Future<void> _saveNote() async {
+    if (_notesController.text.trim().isEmpty &&
+        !_symptoms.any((s) => s['selected'] == true)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mohon isi catatan atau pilih gejala')),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     final selectedSymptoms = _symptoms
@@ -91,34 +98,54 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
         .map((s) => s['name'] as String)
         .toList();
 
-    final result = await DailyNoteService.saveNote(
-      date: _selectedDate,
-      moodLevel: _moodLevel,
-      symptoms: selectedSymptoms,
-      notes: _notesController.text,
-    );
+    try {
+      final result = await DailyNoteService.saveNote(
+        date: _selectedDate,
+        moodLevel: _moodLevel,
+        symptoms: selectedSymptoms,
+        notes: _notesController.text.trim(),
+      );
 
-    setState(() => _isSaving = false);
+      if (mounted) {
+        if (result['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Catatan berhasil disimpan ✅'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Gagal menyimpan catatan'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Save Note Error: $e');
+      if (mounted) {
+        String errorMsg = 'Gagal menyimpan catatan';
 
-    if (mounted) {
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Catatan berhasil disimpan 📝'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        Navigator.pop(context, true);
-      } else {
+        if (e.toString().contains('HTML') || e.toString().contains('login')) {
+          errorMsg = 'Anda belum login. Silakan login terlebih dahulu.';
+        } else if (e.toString().contains('Socket') ||
+            e.toString().contains('Connection')) {
+          errorMsg = 'Tidak dapat terhubung ke server';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? 'Gagal menyimpan catatan'),
+            content: Text(errorMsg),
             backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -141,7 +168,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8E8F0), // Soft pink background
+      backgroundColor: const Color(0xFFF8E8F0),
       appBar: AppBar(
         backgroundColor: Colors.white,
         foregroundColor: Colors.pink,
@@ -171,7 +198,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                   // Date Header
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(20),
@@ -185,21 +212,19 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Colors.black87,
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Mood Question
+                  // Mood Section
                   const Text(
                     '😊 Bagaimana perasaanmu hari ini?',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
 
-                  // Mood Slider Card
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -215,9 +240,8 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                           divisions: 9,
                           activeColor: Colors.pink,
                           inactiveColor: Colors.pink.shade100,
-                          onChanged: (value) {
-                            setState(() => _moodLevel = value.toInt());
-                          },
+                          onChanged: (value) =>
+                              setState(() => _moodLevel = value.toInt()),
                         ),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -240,7 +264,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                         ),
                         Text(
                           _getMoodEmoji(_moodLevel),
-                          style: const TextStyle(fontSize: 42),
+                          style: const TextStyle(fontSize: 48),
                         ),
                       ],
                     ),
@@ -254,6 +278,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -280,9 +305,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                                 ? FontWeight.w600
                                 : FontWeight.normal,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
                         );
                       }).toList(),
                     ),
@@ -290,12 +312,13 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Additional Notes
+                  // Notes
                   const Text(
                     '📝 Catatan tambahan',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -304,7 +327,7 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                     ),
                     child: TextField(
                       controller: _notesController,
-                      maxLines: 5,
+                      maxLines: 6,
                       decoration: const InputDecoration(
                         hintText: 'Tulis catatanmu di sini...',
                         border: InputBorder.none,
@@ -327,7 +350,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
                         ),
-                        elevation: 3,
                       ),
                       child: _isSaving
                           ? const CircularProgressIndicator(color: Colors.white)
