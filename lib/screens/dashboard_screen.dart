@@ -3,7 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:menstrual_app/screens/prediction_screen.dart';
 import 'package:menstrual_app/screens/notification_screen.dart';
 import 'package:menstrual_app/screens/profile_screen.dart';
-import 'package:menstrual_app/screens/daily_note_screen.dart'; // ← Tambahkan ini
+import 'package:menstrual_app/screens/daily_note_screen.dart';
+import 'package:menstrual_app/screens/mirai_chat_screen.dart'; // ← Tambahkan import ini
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,6 +17,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime _selectedDate = DateTime(2026, 5);
   final DateFormat _dateFormat = DateFormat('MMMM yyyy', 'id');
 
+  // Data tetap sama seperti kode asli kamu
   final Map<DateTime, Map<String, dynamic>> _cycleData = {
     DateTime(2026, 5, 1): {'type': 'prediction', 'intensity': 'light'},
     DateTime(2026, 5, 2): {'type': 'menstruation', 'intensity': 'heavy'},
@@ -30,6 +32,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'currentDay': 1,
     'nextPeriod': '09 June 2026',
   };
+
+  int _currentIndex = 0;
+
+  final List<Widget> _pages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _pages.addAll([
+      _buildDashboardContent(), // Index 0: Dashboard
+      const DailyNoteScreen(), // Index 1: Catatan
+      const MiraiChatScreen(), // Index 2: Chat
+      const ProfileScreen(), // Index 3: Profil
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,228 +83,245 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // ... (semua bagian di atas tetap sama)
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInfoCard(
-                    title: 'PANJANG SIKLUS',
-                    value: '${_summaryData['cycleLength']}',
-                    unit: 'hari',
-                  ),
+
+      // Body akan berubah sesuai bottom nav
+      body: _pages[_currentIndex],
+
+      // Bottom Navigation Bar
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        selectedItemColor: Colors.pink,
+        unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: "Beranda",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.description_outlined),
+            activeIcon: Icon(Icons.description),
+            label: "Catatan",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: "Chat",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: "Profil",
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== KONTEN DASHBOARD ASLI (Tidak diubah) ====================
+  Widget _buildDashboardContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildInfoCard(
+                  title: 'PANJANG SIKLUS',
+                  value: '${_summaryData['cycleLength']}',
+                  unit: 'hari',
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildInfoCard(
-                    title: 'HAID BERIKUTNYA',
-                    value: '${_summaryData['daysUntilNext']}',
-                    unit: 'hari lagi',
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Big Circle (tetap)
-            Container(
-              width: 180,
-              height: 180,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.pink.withOpacity(0.3),
-                  width: 12,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildInfoCard(
+                  title: 'HAID BERIKUTNYA',
+                  value: '${_summaryData['daysUntilNext']}',
+                  unit: 'hari lagi',
                 ),
               ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Hari ke-1',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.pink,
-                    ),
-                  ),
-                  Text(
-                    'siklus',
-                    style: TextStyle(fontSize: 16, color: Colors.pink),
-                  ),
-                ],
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Big Circle
+          Container(
+            width: 180,
+            height: 180,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.pink.withOpacity(0.3),
+                width: 12,
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            // Prediction (tetap)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    'Prediksi:',
-                    style: TextStyle(fontSize: 16, color: Colors.black87),
-                  ),
-                  Text(
-                    _summaryData['nextPeriod'],
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.pink,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.pink.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.water_drop, color: Colors.pink, size: 18),
-                        SizedBox(width: 6),
-                        Text(
-                          'Peluang Ovulasi Rendah',
-                          style: TextStyle(
-                            color: Colors.pink,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Calendar (tetap)
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left),
-                        onPressed: () {},
-                      ),
-                      Text(
-                        _dateFormat.format(_selectedDate),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right),
-                        onPressed: () {},
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Text(
-                        'Sen',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Sel',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Rab',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Kam',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Jum',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Sab',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Min',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildCalendarGrid(),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Row(
+            child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                _LegendItem(color: Colors.red, label: 'Haid'),
-                SizedBox(width: 24),
-                _LegendItem(color: Colors.purple, label: 'Ovulasi'),
+              children: [
+                Text(
+                  'Hari ke-1',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.pink,
+                  ),
+                ),
+                Text(
+                  'siklus',
+                  style: TextStyle(fontSize: 16, color: Colors.pink),
+                ),
               ],
             ),
+          ),
 
-            const SizedBox(height: 30),
+          const SizedBox(height: 16),
 
-            // ✅ TOMBOL CATATAN HARIAN YANG SUDAH DIPERBAIKI
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const DailyNoteScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.edit_note),
-                label: const Text(
-                  'Catatan Harian',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          // Prediction
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  'Prediksi:',
+                  style: TextStyle(fontSize: 16, color: Colors.black87),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pink,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                Text(
+                  _summaryData['nextPeriod'],
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.pink,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.pink.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.water_drop, color: Colors.pink, size: 18),
+                      SizedBox(width: 6),
+                      Text(
+                        'Peluang Ovulasi Rendah',
+                        style: TextStyle(
+                          color: Colors.pink,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Calendar (tetap sama seperti kode kamu)
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: () {},
+                    ),
+                    Text(
+                      _dateFormat.format(_selectedDate),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Text('Sen', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Sel', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Rab', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Kam', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Jum', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Sab', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text('Min', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _buildCalendarGrid(),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              _LegendItem(color: Colors.red, label: 'Haid'),
+              SizedBox(width: 24),
+              _LegendItem(color: Colors.purple, label: 'Ovulasi'),
+            ],
+          ),
+
+          const SizedBox(height: 30),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DailyNoteScreen()),
+                );
+              },
+              icon: const Icon(Icons.edit_note),
+              label: const Text(
+                'Catatan Harian',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.pink,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -330,6 +364,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCalendarGrid() {
+    // ... (kode calendar grid kamu yang asli, tetap sama)
     final days = List.generate(31, (index) => index + 1);
     return GridView.builder(
       shrinkWrap: true,
