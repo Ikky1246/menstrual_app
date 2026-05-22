@@ -3,8 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/daily_note_service.dart';
-import 'mirai_chat_screen.dart'; // ← Import Chat
-import 'profile_screen.dart'; // ← Import Profile (jika sudah ada)
 
 class DailyNoteScreen extends StatefulWidget {
   final DateTime? initialDate;
@@ -21,9 +19,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   int _moodLevel = 5;
   bool _isLoading = false;
   bool _isSaving = false;
-
-  // Bottom Navigation State
-  int _currentIndex = 1; // 1 = Catatan (karena ini halaman Catatan)
 
   final List<Map<String, dynamic>> _symptoms = [
     {'name': 'Kram perut', 'selected': false},
@@ -133,7 +128,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
       print('Save Note Error: $e');
       if (mounted) {
         String errorMsg = 'Gagal menyimpan catatan';
-
         if (e.toString().contains('HTML') || e.toString().contains('login')) {
           errorMsg = 'Anda belum login. Silakan login terlebih dahulu.';
         } else if (e.toString().contains('Socket') ||
@@ -194,7 +188,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
         ],
       ),
 
-      // Body tetap sama persis
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.pink))
           : SingleChildScrollView(
@@ -300,9 +293,8 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                         return FilterChip(
                           label: Text(symptom['name']),
                           selected: isSelected,
-                          onSelected: (selected) {
-                            setState(() => symptom['selected'] = selected);
-                          },
+                          onSelected: (selected) =>
+                              setState(() => symptom['selected'] = selected),
                           backgroundColor: Colors.grey.shade100,
                           selectedColor: Colors.pink.shade50,
                           checkmarkColor: Colors.pink,
@@ -372,54 +364,6 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
                 ],
               ),
             ),
-
-      // ==================== BOTTOM NAVIGATION BAR ====================
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        selectedItemColor: Colors.pink,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/dashboard');
-          } else if (index == 2) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const MiraiChatScreen()),
-            );
-          } else if (index == 3) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: "Beranda",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.description),
-            activeIcon: Icon(Icons.description),
-            label: "Catatan",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: "Chat",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: "Profil",
-          ),
-        ],
-      ),
     );
   }
 }
