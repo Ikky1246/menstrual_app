@@ -1,3 +1,5 @@
+// lib/screens/mirai_chat_screen.dart
+
 import 'package:flutter/material.dart';
 
 class MiraiChatScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF7F9FB),
         elevation: 0,
+        centerTitle: true,
         title: const Text(
           "MIRAI",
           style: TextStyle(
@@ -29,20 +32,7 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
             color: Color(0xFF9B0044),
           ),
         ),
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.logout, color: Color(0xFF9B0044)),
-          onPressed: () {},
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.notifications_outlined,
-              color: Color(0xFF9B0044),
-            ),
-            onPressed: () {},
-          ),
-        ],
+        // Tidak ada leading (back button) dan actions (lonceng)
       ),
 
       body: Column(
@@ -53,7 +43,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
               controller: _scrollController,
               padding: const EdgeInsets.all(16),
               children: [
-                // Date Divider
                 const Center(
                   child: Chip(
                     label: Text("Hari Ini", style: TextStyle(fontSize: 12)),
@@ -62,7 +51,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Bot Message
                 _buildBotMessage(
                   "Halo! Aku di sini untuk mendukung perjalanan kesehatanmu. Bagaimana perasaanmu hari ini?",
                   "09:41",
@@ -70,7 +58,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
 
                 const SizedBox(height: 16),
 
-                // User Message
                 _buildUserMessage(
                   "Akhir-akhir ini aku merasa lebih mudah lelah dari biasanya. Apakah itu normal di fase siklus ini?",
                   "09:42",
@@ -78,7 +65,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
 
                 const SizedBox(height: 16),
 
-                // Bot Message with Recommendation Card
                 _buildBotMessageWithCard(
                   "Ya, rasa lelah yang meningkat memang cukup umum saat tubuh mempersiapkan fase berikutnya. Aku sarankan kamu mencatat kualitas tidur malam ini.",
                   "09:43",
@@ -86,7 +72,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
 
                 const SizedBox(height: 16),
 
-                // User Message 2
                 _buildUserMessage(
                   'Makasih informasinya. Bisa bantu aku catat "Catatan Harian" untuk tingkat kelelahan hari ini?',
                   "09:44",
@@ -94,7 +79,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
 
                 const SizedBox(height: 24),
 
-                // Typing Indicator
                 Row(
                   children: [
                     const SizedBox(width: 8),
@@ -164,42 +148,10 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
           ),
         ],
       ),
-
-      // Bottom Navigation Bar
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 2,
-        selectedItemColor: primary,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: "Beranda",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.description_outlined),
-            activeIcon: Icon(Icons.description),
-            label: "Catatan",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: "Chat",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: "Profil",
-          ),
-        ],
-      ),
     );
   }
 
-  // ==================== WIDGET CHAT ====================
-
+  // ==================== WIDGET CHAT (tetap sama) ====================
   Widget _buildBotMessage(String text, String time) {
     return Align(
       alignment: Alignment.centerLeft,
@@ -422,7 +374,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
 
   void _sendMessage() {
     if (_controller.text.trim().isEmpty) return;
-    // Tambahkan logika pengiriman pesan di sini nanti
     _controller.clear();
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent,

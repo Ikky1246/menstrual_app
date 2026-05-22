@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'mirai_chat_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -21,8 +20,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isLoading = true;
   bool _isSaving = false;
-
-  int _currentIndex = 3; // 3 = Profil
 
   @override
   void initState() {
@@ -58,6 +55,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       print('Error load profile: $e');
+      // Opsional: tampilkan snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gagal memuat data profil')),
+        );
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -86,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message'] ?? 'Gagal menyimpan'),
+              content: Text(result['message'] ?? 'Gagal menyimpan profil'),
               backgroundColor: Colors.red,
             ),
           );
@@ -97,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Terjadi kesalahan'),
+            content: Text('Terjadi kesalahan saat menyimpan'),
             backgroundColor: Colors.red,
           ),
         );
@@ -245,50 +248,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-
-      // Bottom Navigation Bar
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        selectedItemColor: Colors.pink,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0)
-            Navigator.pushReplacementNamed(context, '/dashboard');
-          else if (index == 1)
-            Navigator.pushReplacementNamed(context, '/daily-note');
-          else if (index == 2) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const MiraiChatScreen()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: "Beranda",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.description),
-            activeIcon: Icon(Icons.description),
-            label: "Catatan",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: "Chat",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            activeIcon: Icon(Icons.person),
-            label: "Profil",
-          ),
-        ],
-      ),
     );
   }
 

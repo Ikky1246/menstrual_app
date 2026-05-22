@@ -1,10 +1,11 @@
+// lib/screens/dashboard_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:menstrual_app/screens/prediction_screen.dart';
-import 'package:menstrual_app/screens/notification_screen.dart';
-import 'package:menstrual_app/screens/profile_screen.dart';
-import 'package:menstrual_app/screens/daily_note_screen.dart';
-import 'package:menstrual_app/screens/mirai_chat_screen.dart'; // ← Tambahkan import ini
+import 'daily_note_screen.dart';
+import 'mirai_chat_screen.dart';
+import 'profile_screen.dart';
+import 'notification_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -14,10 +15,14 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  int _currentIndex = 0;
+
+  late final List<Widget> _pages;
+
+  // Data Dashboard
   DateTime _selectedDate = DateTime(2026, 5);
   final DateFormat _dateFormat = DateFormat('MMMM yyyy', 'id');
 
-  // Data tetap sama seperti kode asli kamu
   final Map<DateTime, Map<String, dynamic>> _cycleData = {
     DateTime(2026, 5, 1): {'type': 'prediction', 'intensity': 'light'},
     DateTime(2026, 5, 2): {'type': 'menstruation', 'intensity': 'heavy'},
@@ -33,19 +38,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'nextPeriod': '09 June 2026',
   };
 
-  int _currentIndex = 0;
-
-  final List<Widget> _pages = [];
-
   @override
   void initState() {
     super.initState();
-    _pages.addAll([
-      _buildDashboardContent(), // Index 0: Dashboard
-      const DailyNoteScreen(), // Index 1: Catatan
-      const MiraiChatScreen(), // Index 2: Chat
-      const ProfileScreen(), // Index 3: Profil
-    ]);
+    _pages = [
+      _buildDashboardContent(),
+      const DailyNoteScreen(),
+      const MiraiChatScreen(),
+      const ProfileScreen(),
+    ];
   }
 
   @override
@@ -72,22 +73,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               MaterialPageRoute(builder: (_) => const NotificationScreen()),
             ),
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.person_outline, color: Colors.pink),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
-          ),
-          const SizedBox(width: 8),
         ],
       ),
 
-      // Body akan berubah sesuai bottom nav
       body: _pages[_currentIndex],
 
-      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         selectedItemColor: Colors.pink,
@@ -95,9 +85,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         showUnselectedLabels: true,
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+          setState(() => _currentIndex = index);
         },
         items: const [
           BottomNavigationBarItem(
@@ -125,7 +113,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ==================== KONTEN DASHBOARD ASLI (Tidak diubah) ====================
+  // ==================== KONTEN DASHBOARD ====================
   Widget _buildDashboardContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -237,7 +225,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 24),
 
-          // Calendar (tetap sama seperti kode kamu)
+          // Calendar
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -326,7 +314,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Widget pendukung lainnya (tetap sama)
   Widget _buildInfoCard({
     required String title,
     required String value,
@@ -364,7 +351,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCalendarGrid() {
-    // ... (kode calendar grid kamu yang asli, tetap sama)
     final days = List.generate(31, (index) => index + 1);
     return GridView.builder(
       shrinkWrap: true,
