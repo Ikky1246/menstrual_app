@@ -1,5 +1,5 @@
 // lib/screens/onboarding/mandatory_form_screen.dart
-// VERSION FINAL - Desain sesuai HTML (tanpa perubahan logika) - Fixed
+// VERSION FINAL - Desain sesuai HTML, overflow fixed
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -45,7 +45,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   void initState() {
     super.initState();
     _periodDurationController.text = '5';
-    // print dihapus untuk menghindari warning avoid_print
   }
 
   @override
@@ -151,7 +150,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           ? DateFormat(AppConstants.dateFormatApi).format(_previousPeriodDate!)
           : null;
 
-      // Gunakan saveCycle (endpoint /api/mobile/cycle)
       final result = await CycleService.saveCycle(
         lastPeriodDate: lastPeriodFormatted,
         previousPeriodDate: previousPeriodFormatted,
@@ -163,15 +161,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
       );
 
       if (result['success'] == true) {
-        // Ambil cycleId dari response
         final cycleData = result['data'];
         
-        // PRIORITAS: Cari 'id' (MongoDB ObjectId) dulu!
         _savedCycleMongoId = cycleData['id']?.toString() ?? 
                              cycleData['id_cycle']?.toString() ?? 
                              cycleData['_id']?.toString();
         
-        // Simpan ke local
         final prefs = await SharedPreferences.getInstance();
         if (_savedCycleMongoId != null) {
           await prefs.setString('latest_cycle_id', _savedCycleMongoId!);
@@ -179,7 +174,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
         if (mounted) {
           setState(() => _isLoading = false);
-          // Tampilkan dialog pilihan
           _showOptionalFormDialog();
         }
       } else {
@@ -214,7 +208,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              // Navigasi ke Dashboard
               if (mounted) {
                 Navigator.pushReplacement(
                   context,
@@ -231,9 +224,8 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(dialogContext); // Tutup dialog dulu
+              Navigator.pop(dialogContext);
               
-              // Beri sedikit delay agar dialog benar-benar tertutup
               Future.delayed(const Duration(milliseconds: 150), () {
                 if (mounted && _savedCycleMongoId != null && _lastPeriodDate != null) {
                   Navigator.push(
@@ -253,7 +245,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                     ),
                   );
                 } else if (mounted) {
-                  // Fallback: langsung ke Dashboard
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
@@ -276,7 +267,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   }
 
   // ============================================
-  // BUILD UI - DESAIN SESUAI HTML
+  // BUILD UI - DESAIN SESUAI HTML (OVERFLOW FIXED)
   // ============================================
   
   @override
@@ -285,7 +276,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     final sliderWidth = screenWidth * 0.7; // 70% dari lebar layar untuk slider
     
     return Scaffold(
-      backgroundColor: const Color(0xFFf4fafd), // background
+      backgroundColor: const Color(0xFFf4fafd),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(64),
         child: Container(
@@ -304,14 +295,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Tombol back
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.arrow_back, color: Color(0xFFb80049)),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
-              // Title MIRAI
               const Text(
                 'MIRAI',
                 style: TextStyle(
@@ -320,7 +309,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   color: Color(0xFFb80049),
                 ),
               ),
-              // Tombol menu
               IconButton(
                 onPressed: () {},
                 icon: const Icon(Icons.more_vert, color: Color(0xFFb80049)),
@@ -513,7 +501,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Pain Level Card
+              // Pain Level Card (overflow fixed)
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -532,11 +520,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Tingkat Nyeri',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                        const Expanded(
+                          child: Text(
+                            'Tingkat Nyeri',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -552,7 +541,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Custom Slider
                     Column(
                       children: [
                         SizedBox(
@@ -619,7 +607,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Stress Level Card
+              // Stress Level Card (overflow fixed)
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -638,11 +626,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Tingkat Stres',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                        const Expanded(
+                          child: Text(
+                            'Tingkat Stres',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -724,7 +713,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Sleep Card
+              // Sleep Card (overflow fixed)
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -743,11 +732,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Rata-rata Tidur',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                        const Expanded(
+                          child: Text(
+                            'Rata-rata Tidur',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

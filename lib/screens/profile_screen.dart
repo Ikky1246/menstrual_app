@@ -55,7 +55,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       print('Error load profile: $e');
-      // Opsional: tampilkan snackbar
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gagal memuat data profil')),
@@ -110,6 +109,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // ==================== LOGOUT ====================
+  Future<void> _logout() async {
+    // Konfirmasi logout
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Keluar'),
+        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Ya, Keluar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      // Panggil service logout (hapus token & data user)
+      await AuthService.logout();
+    } catch (e) {
+      print('Logout error: $e');
+    }
+
+    // Hapus semua route dan navigasi ke halaman login
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -135,6 +170,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'Profil Saya',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        // ==================== TOMBOL LOGOUT DI APP BAR ====================
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Keluar',
+            onPressed: _logout,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.pink))

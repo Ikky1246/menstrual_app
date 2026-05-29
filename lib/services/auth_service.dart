@@ -1,3 +1,5 @@
+// lib/services/auth_service.dart
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,23 @@ import '../models/user_model.dart';
 import '../utils/constants.dart';
 
 class AuthService {
+  // Base URL untuk API mobile (dengan prefix /mobile)
+  static const String baseMobileUrl = '${AppConstants.baseUrl}/api/mobile';
+  // Base URL untuk API umum (tanpa prefix /mobile) – digunakan untuk forgot password dll
+  static const String baseApiUrl = '${AppConstants.baseUrl}/api';
+
+  // Helper: cek apakah response adalah JSON valid
+  static bool _isValidJson(String body) {
+    if (body.trim().isEmpty) return false;
+    if (body.trim().startsWith('<')) return false; // HTML error
+    try {
+      jsonDecode(body);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ==============================================
   // LOGIN - untuk USER (mobile)
   // ==============================================
@@ -13,13 +32,11 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print(
-        '🔐 Mencoba login user ke: ${AppConstants.baseUrl}/api/mobile/login',
-      );
+      print('🔐 Mencoba login user ke: $baseMobileUrl/login');
 
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/login'),
+            Uri.parse('$baseMobileUrl/login'),
             headers: {
               "Content-Type": "application/json",
               "Accept": "application/json",
@@ -30,6 +47,13 @@ class AuthService {
 
       print('📊 Response status: ${response.statusCode}');
       print('📦 Response body: ${response.body}');
+
+      if (!_isValidJson(response.body)) {
+        return {
+          'success': false,
+          'message': 'Server error. Silakan coba lagi.',
+        };
+      }
 
       final data = jsonDecode(response.body);
 
@@ -77,13 +101,11 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print(
-        '🌐 Mengirim request register ke: ${AppConstants.baseUrl}/api/mobile/register',
-      );
+      print('🌐 Mengirim request register ke: $baseMobileUrl/register');
 
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/register'),
+            Uri.parse('$baseMobileUrl/register'),
             headers: {
               "Content-Type": "application/json",
               "Accept": "application/json",
@@ -98,6 +120,13 @@ class AuthService {
 
       print('📊 Status code: ${response.statusCode}');
       print('📦 Response body: ${response.body}');
+
+      if (!_isValidJson(response.body)) {
+        return {
+          'success': false,
+          'message': 'Server error. Silakan coba lagi.',
+        };
+      }
 
       final data = jsonDecode(response.body);
 
@@ -144,11 +173,15 @@ class AuthService {
     try {
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp'),
+            Uri.parse('$baseMobileUrl/verify-otp'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({'email': email, 'otp': otp}),
           )
           .timeout(AppDurations.apiTimeout);
+
+      if (!_isValidJson(response.body)) {
+        return {'success': false, 'message': 'Server error'};
+      }
 
       final data = jsonDecode(response.body);
 
@@ -191,11 +224,15 @@ class AuthService {
     try {
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/resend-otp'),
+            Uri.parse('$baseMobileUrl/resend-otp'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({'email': email}),
           )
           .timeout(AppDurations.apiTimeout);
+
+      if (!_isValidJson(response.body)) {
+        return {'success': false, 'message': 'Server error'};
+      }
 
       final data = jsonDecode(response.body);
 
@@ -226,11 +263,11 @@ class AuthService {
 
     try {
       if (token != null) {
-        print('🚪 Logout user dari: ${AppConstants.baseUrl}/api/mobile/logout');
+        print('🚪 Logout user dari: $baseMobileUrl/logout');
 
         await http
             .post(
-              Uri.parse('${AppConstants.baseUrl}/api/mobile/logout'),
+              Uri.parse('$baseMobileUrl/logout'),
               headers: {
                 "Content-Type": "application/json",
                 "Accept": "application/json",
@@ -278,7 +315,7 @@ class AuthService {
 
       final response = await http
           .get(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
+            Uri.parse('$baseMobileUrl/user/profile'),
             headers: {
               "Accept": "application/json",
               "Authorization": "Bearer $token",
@@ -289,6 +326,9 @@ class AuthService {
       print('📊 Profile response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
+        if (!_isValidJson(response.body)) {
+          return {'success': false, 'message': 'Server error'};
+        }
         final data = jsonDecode(response.body);
 
         if (data['success'] == true && data['data'] != null) {
@@ -337,7 +377,7 @@ class AuthService {
 
       final response = await http
           .put(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/user/profile'),
+            Uri.parse('$baseMobileUrl/user/profile'),
             headers: {
               "Content-Type": "application/json",
               "Accept": "application/json",
@@ -346,6 +386,10 @@ class AuthService {
             body: jsonEncode(payload),
           )
           .timeout(AppDurations.apiTimeout);
+
+      if (!_isValidJson(response.body)) {
+        return {'success': false, 'message': 'Server error'};
+      }
 
       final responseData = jsonDecode(response.body);
       print('📊 Update response: ${response.statusCode}');
@@ -370,21 +414,38 @@ class AuthService {
   }
 
   // ==============================================
-  // FORGOT PASSWORD - Send OTP
+  // FORGOT PASSWORD - Send OTP (menggunakan baseApiUrl tanpa /mobile)
   // ==============================================
   static Future<Map<String, dynamic>> forgotPassword({
     required String email,
   }) async {
     try {
+      final url = Uri.parse('$baseApiUrl/forgot-password');
+      print('📤 Sending forgot password request to: $url');
+
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/forgot-password'),
-            headers: {"Content-Type": "application/json"},
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
             body: jsonEncode({'email': email}),
           )
           .timeout(AppDurations.apiTimeout);
 
-      final data = jsonDecode(response.body);
+      final responseBody = response.body.trim();
+      print('📥 Response status: ${response.statusCode}');
+
+      if (!_isValidJson(responseBody)) {
+        print('❌ Response is not JSON: $responseBody');
+        return {
+          'success': false,
+          'message': 'Server error. Silakan coba lagi nanti.',
+        };
+      }
+
+      final data = jsonDecode(responseBody);
 
       if (response.statusCode == 200 && data['success'] == true) {
         return {
@@ -400,25 +461,38 @@ class AuthService {
       }
     } catch (e) {
       print('❌ Forgot password error: $e');
-      return {'success': false, 'message': 'Gagal terhubung ke server'};
+      return {
+        'success': false,
+        'message': 'Gagal terhubung ke server. Periksa koneksi internet Anda.',
+      };
     }
   }
 
   // ==============================================
-  // VERIFY OTP FOR RESET PASSWORD
+  // VERIFY OTP FOR RESET PASSWORD (menggunakan baseApiUrl)
   // ==============================================
   static Future<Map<String, dynamic>> verifyResetOtp({
     required String email,
     required String otp,
   }) async {
     try {
+      final url = Uri.parse('$baseApiUrl/verify-otp');
+      print('📤 Verifying OTP for reset: $url');
+
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/verify-otp-reset'),
-            headers: {"Content-Type": "application/json"},
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
             body: jsonEncode({'email': email, 'otp': otp}),
           )
           .timeout(AppDurations.apiTimeout);
+
+      if (!_isValidJson(response.body)) {
+        return {'success': false, 'message': 'Server error'};
+      }
 
       final data = jsonDecode(response.body);
 
@@ -441,7 +515,7 @@ class AuthService {
   }
 
   // ==============================================
-  // RESET PASSWORD
+  // RESET PASSWORD (menggunakan baseApiUrl)
   // ==============================================
   static Future<Map<String, dynamic>> resetPassword({
     required String email,
@@ -450,10 +524,16 @@ class AuthService {
     required String passwordConfirmation,
   }) async {
     try {
+      final url = Uri.parse('$baseApiUrl/reset-password');
+      print('📤 Resetting password at: $url');
+
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/api/mobile/reset-password'),
-            headers: {"Content-Type": "application/json"},
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
             body: jsonEncode({
               'email': email,
               'reset_token': resetToken,
@@ -462,6 +542,10 @@ class AuthService {
             }),
           )
           .timeout(AppDurations.apiTimeout);
+
+      if (!_isValidJson(response.body)) {
+        return {'success': false, 'message': 'Server error'};
+      }
 
       final data = jsonDecode(response.body);
 
