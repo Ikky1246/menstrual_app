@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Siklusku',
+      title: 'MIRAI',
       theme: ThemeData(
         primarySwatch: Colors.pink,
         fontFamily: 'Poppins',
@@ -159,7 +159,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               SizedBox(height: 20),
               Text(
-                'Siklusku',
+                'MIRAI',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
