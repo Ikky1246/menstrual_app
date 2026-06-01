@@ -353,7 +353,7 @@ class AuthService {
   }
 
   // ==============================================
-  // UPDATE PROFILE
+  // UPDATE PROFILE (DENGAN DUKUNGAN PCOS & KB)
   // ==============================================
   static Future<Map<String, dynamic>> updateProfile({
     String? namaLengkap,
@@ -361,6 +361,8 @@ class AuthService {
     int? age,
     double? weightKg,
     double? heightCm,
+    bool? pcosDiagnosed,      // TAMBAH
+    bool? birthControlUse,    // TAMBAH
   }) async {
     try {
       final token = await getToken();
@@ -374,6 +376,8 @@ class AuthService {
       if (age != null) payload['age'] = age;
       if (weightKg != null) payload['weight_kg'] = weightKg;
       if (heightCm != null) payload['height_cm'] = heightCm;
+      if (pcosDiagnosed != null) payload['pcos_diagnosed'] = pcosDiagnosed ? 1 : 0;
+      if (birthControlUse != null) payload['birth_control_use'] = birthControlUse ? 1 : 0;
 
       final response = await http
           .put(
@@ -395,6 +399,7 @@ class AuthService {
       print('📊 Update response: ${response.statusCode}');
 
       if (response.statusCode == 200 && responseData['success'] == true) {
+        // Refresh data user lokal setelah update
         await getProfile();
 
         return {

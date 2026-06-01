@@ -235,10 +235,6 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
             ),
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
-                  onPressed: () {},
-                ),
                 Expanded(
                   child: TextField(
                     controller: _controller,

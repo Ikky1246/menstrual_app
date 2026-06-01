@@ -2,10 +2,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GeminiService {
-  static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
+  static const String _apiKey = "YOUR_API_KEY_HERE"; // Ganti dengan API key Anda
   static const String _baseUrl = "https://generativelanguage.googleapis.com/v1beta";
   static const String _model = "gemini-2.5-flash"; // model stabil
 

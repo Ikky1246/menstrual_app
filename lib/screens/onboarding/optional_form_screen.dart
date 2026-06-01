@@ -1,8 +1,10 @@
 // lib/screens/onboarding/optional_form_screen.dart
-// VERSION FINAL - Desain sesuai HTML (tanpa perubahan logika) - Fixed
+// VERSION FINAL - DENGAN PREDIKSI AI & INPUT WAJIB USIA, PCOS, KB
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
+import 'package:menstrual_app/services/auth_service.dart';
 import 'package:menstrual_app/services/cycle_service.dart';
 import 'package:menstrual_app/utils/constants.dart';
 
@@ -42,9 +44,13 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
   late double _sleepHours;
   late int _moodLevel;
   
-  // Data opsional tambahan
+  // Data tambahan untuk profil (WAJIB usia, pilihan PCOS/KB)
+  int _age = 0;
+  bool _pcosSelected = false;
+  bool _birthControlSelected = false;
   double _weight = 0;
   double _height = 0;
+  
   String? _selectedMood;
   final _notesController = TextEditingController();
   
@@ -98,39 +104,86 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
   }
 
   Future<void> _saveAndContinue() async {
+    // Validasi usia (wajib diisi)
+    if (_age <= 0 || _age > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Usia wajib diisi (1-100 tahun) untuk prediksi akurat'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
-    final result = await CycleService.updateCycle(
-      cycleId: widget.cycleId,
-      painLevel: widget.painLevel,
-      stressScoreCycle: _stressLevel,
-      sleepHoursCycle: _sleepHours,
-      moodScore: _moodLevel,
-    );
+    try {
+      // 1. Update profil user (age, weight, height, pcos, birth_control)
+      final userUpdate = await AuthService.updateProfile(
+        age: _age,
+        weightKg: _weight > 0 ? _weight : null,
+        heightCm: _height > 0 ? _height : null,
+        pcosDiagnosed: _pcosSelected,
+        birthControlUse: _birthControlSelected,
+      );
 
-    if (mounted) {
+      if (!userUpdate['success']) {
+        throw Exception(userUpdate['message']);
+      }
+
+      // 2. Ambil user terbaru (termasuk BMI)
+      final user = await AuthService.getCurrentUser();
+      final age = user?.age ?? _age;
+      double bmi = user?.bmi ?? 22.0;
+      if (_weight > 0 && _height > 0 && bmi == 22.0) {
+        bmi = _weight / ((_height / 100) * (_height / 100));
+      }
+      final pcos = user?.pcosDiagnosed ?? _pcosSelected;
+      final birthControl = user?.birthControlUse ?? _birthControlSelected;
+
+      // 3. Update cycle dengan prediksi AI (menggunakan method baru)
+      final cycleUpdate = await CycleService.updateCycleWithPrediction(
+        cycleId: widget.cycleId,
+        lastPeriodDate: DateFormat(AppConstants.dateFormatApi).format(widget.lastPeriodDate),
+        previousPeriodDate: widget.previousPeriodDate != null
+            ? DateFormat(AppConstants.dateFormatApi).format(widget.previousPeriodDate!)
+            : null,
+        painLevel: widget.painLevel,
+        stressScoreCycle: _stressLevel,
+        sleepHoursCycle: _sleepHours,
+        moodScore: _moodLevel,
+        age: age,
+        bmi: bmi,
+        pcosDiagnosed: pcos ? 1 : 0,
+        birthControlUse: birthControl ? 1 : 0,
+      );
+
+      if (!cycleUpdate['success']) {
+        throw Exception(cycleUpdate['message']);
+      }
+
+      // 4. Navigasi ke dashboard
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Data tersimpan! Prediksi AI siap digunakan.'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
       setState(() => _isLoading = false);
-
-      if (result['success'] == true) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const DashboardScreen()),
-          );
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Data berhasil disimpan! Selamat datang 🎉'),
-              backgroundColor: AppColors.success,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      } else {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? 'Gagal menyimpan data'),
-            backgroundColor: AppColors.error,
+            content: Text('❌ Gagal: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -288,13 +341,13 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
             ),
             const SizedBox(height: 48),
 
-            // Data Tambahan (Opsional) Header
+            // Data Tambahan (Wajib untuk prediksi akurat)
             Row(
               children: [
                 const Icon(Icons.edit_note, color: Color(0xFFb80049), size: 20),
                 const SizedBox(width: 8),
                 const Text(
-                  'Data Tambahan (Opsional)',
+                  'Data Tambahan (Wajib untuk prediksi akurat)',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -305,7 +358,7 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Isi untuk mendapatkan prediksi yang lebih akurat',
+              'Isi data berikut agar AI dapat memberikan prediksi yang akurat',
               style: TextStyle(
                 fontSize: 14,
                 color: Color(0xFF5b3f43),
@@ -313,7 +366,91 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Mood Section
+            // Input Usia (WAJIB)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFe4bdc2).withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Usia *',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFb80049)),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: 'Masukkan usia Anda (tahun)',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    onChanged: (value) {
+                      _age = int.tryParse(value) ?? 0;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Pilihan PCOS
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFe4bdc2).withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Apakah didiagnosis PCOS?',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  Switch(
+                    value: _pcosSelected,
+                    onChanged: (val) => setState(() => _pcosSelected = val),
+                    activeColor: const Color(0xFFb80049),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Pilihan Kontrasepsi
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFe4bdc2).withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Menggunakan kontrasepsi hormonal?',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  Switch(
+                    value: _birthControlSelected,
+                    onChanged: (val) => setState(() => _birthControlSelected = val),
+                    activeColor: const Color(0xFFb80049),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Mood Section (tetap opsional)
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -336,7 +473,7 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                       const Icon(Icons.mood, color: Color(0xFFb80049), size: 20),
                       const SizedBox(width: 8),
                       const Text(
-                        'Mood Hari Ini',
+                        'Mood Hari Ini (Opsional)',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -399,145 +536,144 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
             ),
             const SizedBox(height: 24),
 
- // Symptoms Section - VERSION WITH PERFECT CENTERING
-Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    Row(
-      children: [
-        const Icon(Icons.medical_services, color: Color(0xFFb80049), size: 20),
-        const SizedBox(width: 8),
-        const Text(
-          'Gejala yang Dirasakan',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
-      ],
-    ),
-    const SizedBox(height: 16),
-    LayoutBuilder(
-      builder: (context, constraints) {
-        // Tentukan jumlah kolom berdasarkan lebar layar
-        int crossAxisCount = 4;
-        if (constraints.maxWidth < 400) {
-          crossAxisCount = 3; // Untuk layar kecil (HP)
-        } else if (constraints.maxWidth < 600) {
-          crossAxisCount = 4; // Untuk layar sedang
-        } else {
-          crossAxisCount = 5; // Untuk layar besar
-        }
-        
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.9,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: _commonSymptoms.length,
-          itemBuilder: (context, index) {
-            final symptom = _commonSymptoms[index];
-            final isSelected = symptom['selected'] as bool;
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  symptom['selected'] = !isSelected;
-                });
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isSelected 
-                        ? const Color(0xFFb80049)
-                        : const Color(0xFFe4bdc2).withValues(alpha: 0.2),
-                    width: isSelected ? 2 : 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFe91663).withValues(alpha: 0.08),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
+            // Symptoms Section (opsional) - kode sama seperti asli, tidak diubah
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.medical_services, color: Color(0xFFb80049), size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Gejala yang Dirasakan (Opsional)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ],
                 ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (isSelected)
-                      const Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Icon(
-                          Icons.check_circle,
-                          size: 16,
-                          color: Color(0xFFb80049),
-                        ),
+                const SizedBox(height: 16),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    int crossAxisCount = 4;
+                    if (constraints.maxWidth < 400) {
+                      crossAxisCount = 3;
+                    } else if (constraints.maxWidth < 600) {
+                      crossAxisCount = 4;
+                    } else {
+                      crossAxisCount = 5;
+                    }
+                    
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        childAspectRatio: 0.9,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                       ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
+                      itemCount: _commonSymptoms.length,
+                      itemBuilder: (context, index) {
+                        final symptom = _commonSymptoms[index];
+                        final isSelected = symptom['selected'] as bool;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              symptom['selected'] = !isSelected;
+                            });
+                          },
+                          child: Container(
                             decoration: BoxDecoration(
-                              color: isSelected 
-                                  ? const Color(0xFFe2165f).withValues(alpha: 0.3)
-                                  : const Color(0xFFe8eff1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Icon(
-                                symptom['icon'] as IconData,
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
                                 color: isSelected 
                                     ? const Color(0xFFb80049)
-                                    : const Color(0xFF5b3f43),
-                                size: 24,
+                                    : const Color(0xFFe4bdc2).withValues(alpha: 0.2),
+                                width: isSelected ? 2 : 1,
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFe91663).withValues(alpha: 0.08),
+                                  blurRadius: 30,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                if (isSelected)
+                                  const Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Icon(
+                                      Icons.check_circle,
+                                      size: 16,
+                                      color: Color(0xFFb80049),
+                                    ),
+                                  ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 48,
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          color: isSelected 
+                                              ? const Color(0xFFe2165f).withValues(alpha: 0.3)
+                                              : const Color(0xFFe8eff1),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Center(
+                                          child: Icon(
+                                            symptom['icon'] as IconData,
+                                            color: isSelected 
+                                                ? const Color(0xFFb80049)
+                                                : const Color(0xFF5b3f43),
+                                            size: 24,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                        child: Text(
+                                          symptom['name'] as String,
+                                          textAlign: TextAlign.center,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          softWrap: true,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                            color: isSelected ? const Color(0xFFb80049) : const Color(0xFF161d1f),
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Text(
-                              symptom['name'] as String,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              softWrap: true,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: isSelected ? const Color(0xFFb80049) : const Color(0xFF161d1f),
-                                height: 1.3,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                        );
+                      },
+                    );
+                  },
                 ),
-              ),
-            );
-          },
-        );
-      },
-    ),
-  ],
-),
+              ],
+            ),
             const SizedBox(height: 24),
 
-            // Physical Data Button
+            // Physical Data Button (opsional)
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -650,7 +786,7 @@ Column(
                     const Icon(Icons.description, color: Color(0xFFb80049), size: 20),
                     const SizedBox(width: 8),
                     const Text(
-                      'Catatan Tambahan',
+                      'Catatan Tambahan (Opsional)',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
