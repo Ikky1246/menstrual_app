@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cycle_model.dart';
 import '../utils/constants.dart';
 import 'auth_service.dart';
+import 'api_service.dart';  // ← TAMBAHKAN import ApiService
 import 'package:flutter/foundation.dart';
 
 class CycleService {
@@ -28,7 +29,7 @@ class CycleService {
   }
 
   // ==============================================
-  // SAVE CYCLE DATA (Sesuai dengan backend Laravel)
+  // SAVE CYCLE DATA
   // ==============================================
   static Future<Map<String, dynamic>> saveCycle({
     required String lastPeriodDate,
@@ -111,7 +112,7 @@ class CycleService {
   }
 
   // ==============================================
-  // GET LATEST CYCLE (DIPERBAIKI)
+  // GET LATEST CYCLE
   // ==============================================
   static Future<Map<String, dynamic>> getLatestCycle() async {
     try {
@@ -204,7 +205,7 @@ class CycleService {
   }
 
   // ==============================================
-  // UPDATE CYCLE (untuk optional form)
+  // UPDATE CYCLE (tambah parameter cycleLengthDays)
   // ==============================================
   static Future<Map<String, dynamic>> updateCycle({
     required String cycleId,
@@ -212,6 +213,7 @@ class CycleService {
     int? stressScoreCycle,
     double? sleepHoursCycle,
     int? moodScore,
+    int? cycleLengthDays,      // ← TAMBAHKAN parameter ini
   }) async {
     try {
       final token = await _getToken();
@@ -224,6 +226,7 @@ class CycleService {
       if (stressScoreCycle != null) payload['stress_score_cycle'] = stressScoreCycle;
       if (sleepHoursCycle != null) payload['sleep_hours_cycle'] = sleepHoursCycle;
       if (moodScore != null) payload['mood_score'] = moodScore;
+      if (cycleLengthDays != null) payload['cycle_length_days'] = cycleLengthDays; // ← TAMBAH
 
       final url = '${AppConstants.baseUrl}/api/mobile/cycle/$cycleId';
       
@@ -264,6 +267,7 @@ class CycleService {
             stressScoreCycle: stressScoreCycle,
             sleepHoursCycle: sleepHoursCycle,
             moodScore: moodScore,
+            cycleLengthDays: cycleLengthDays,
           );
         } else {
           return {'success': false, 'message': 'Sesi habis, silakan login kembali'};
@@ -276,6 +280,58 @@ class CycleService {
       }
     } catch (e) {
       _log('❌ Error updating cycle: $e');
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  // ==============================================
+  // UPDATE CYCLE WITH AI PREDICTION (BARU)
+  // ==============================================
+  static Future<Map<String, dynamic>> updateCycleWithPrediction({
+    required String cycleId,
+    required String lastPeriodDate,
+    String? previousPeriodDate,
+    required int painLevel,
+    required int stressScoreCycle,
+    required double sleepHoursCycle,
+    required int moodScore,
+    required int age,
+    required double bmi,
+    required int pcosDiagnosed,
+    required int birthControlUse,
+  }) async {
+    try {
+      // 1. Panggil AI prediksi
+      final predResult = await ApiService.predictCycle(
+        tanggalHaidTerakhir: lastPeriodDate,
+        tanggalHaidBulanSebelumnya: previousPeriodDate,
+        painLevel: painLevel,
+        stressScore: stressScoreCycle,
+        sleepHours: sleepHoursCycle,
+        moodScore: moodScore,
+      );
+
+      int predictedCycleLength = 28;
+      if (predResult['success'] == true && predResult['data'] != null) {
+        final data = predResult['data'];
+        predictedCycleLength = (data['predicted_cycle_length'] as num).round();
+        predictedCycleLength = predictedCycleLength.clamp(20, 45);
+        _log('🎯 AI predicted cycle length: $predictedCycleLength');
+      } else {
+        _log('⚠️ AI prediction failed, using default 28');
+      }
+
+      // 2. Update cycle dengan hasil prediksi
+      return await updateCycle(
+        cycleId: cycleId,
+        painLevel: painLevel,
+        stressScoreCycle: stressScoreCycle,
+        sleepHoursCycle: sleepHoursCycle,
+        moodScore: moodScore,
+        cycleLengthDays: predictedCycleLength,
+      );
+    } catch (e) {
+      _log('❌ updateCycleWithPrediction error: $e');
       return {'success': false, 'message': 'Error: $e'};
     }
   }
@@ -373,50 +429,51 @@ class CycleService {
       return {'success': false, 'message': 'Error: $e'};
     }
   }
+
   // ==============================================
-// SUBMIT CORRECTION (Koreksi siklus dari user)
-// ==============================================
-static Future<Map<String, dynamic>> submitCorrection({
-  required DateTime expectedStartDate,
-  required DateTime actualStartDate,
-  required String correctionType, // 'start' or 'end'
-}) async {
-  try {
-    final token = await _getToken();
-    if (token == null) {
-      return {'success': false, 'message': 'Token tidak ditemukan'};
-    }
+  // SUBMIT CORRECTION
+  // ==============================================
+  static Future<Map<String, dynamic>> submitCorrection({
+    required DateTime expectedStartDate,
+    required DateTime actualStartDate,
+    required String correctionType,
+  }) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'Token tidak ditemukan'};
+      }
 
-    final payload = {
-      'expected_start_date': expectedStartDate.toIso8601String().split('T')[0],
-      'actual_start_date': actualStartDate.toIso8601String().split('T')[0],
-      'correction_type': correctionType,
-    };
-
-    final response = await http.post(
-      Uri.parse('${AppConstants.baseUrl}/api/mobile/correction'),
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode(payload),
-    ).timeout(AppDurations.apiTimeout);
-
-    final data = jsonDecode(response.body);
-    _log('📊 Correction response: ${response.statusCode}');
-
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      return {
-        'success': true,
-        'message': data['message'] ?? 'Koreksi berhasil disimpan',
+      final payload = {
+        'expected_start_date': expectedStartDate.toIso8601String().split('T')[0],
+        'actual_start_date': actualStartDate.toIso8601String().split('T')[0],
+        'correction_type': correctionType,
       };
-    } else {
-      return {'success': false, 'message': data['message'] ?? 'Gagal menyimpan koreksi'};
+
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/correction'),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode(payload),
+      ).timeout(AppDurations.apiTimeout);
+
+      final data = jsonDecode(response.body);
+      _log('📊 Correction response: ${response.statusCode}');
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Koreksi berhasil disimpan',
+        };
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Gagal menyimpan koreksi'};
+      }
+    } catch (e) {
+      _log('❌ Error submitting correction: $e');
+      return {'success': false, 'message': 'Error: $e'};
     }
-  } catch (e) {
-    _log('❌ Error submitting correction: $e');
-    return {'success': false, 'message': 'Error: $e'};
   }
-}
 }

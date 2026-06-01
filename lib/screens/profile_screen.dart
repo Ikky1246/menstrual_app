@@ -159,26 +159,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8E8F0),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.pink,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Profil Saya',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        // ==================== TOMBOL LOGOUT DI APP BAR ====================
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Keluar',
-            onPressed: _logout,
-          ),
-        ],
-      ),
+  backgroundColor: Colors.white,
+  foregroundColor: Colors.pink,
+  elevation: 0,
+  automaticallyImplyLeading: false, // menghilangkan panah back
+  title: const Text(
+    'Profil Saya',
+    style: TextStyle(fontWeight: FontWeight.bold),
+  ),
+  centerTitle: true, // judul di tengah
+  actions: [
+    IconButton(
+      icon: const Icon(Icons.logout),
+      tooltip: 'Keluar',
+      onPressed: _logout,
+    ),
+  ],
+),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.pink))
           : SingleChildScrollView(

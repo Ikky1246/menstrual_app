@@ -2,6 +2,8 @@
 // Fitur lengkap: merah haid aktual (termasuk siklus sebelumnya), pink prediksi geser, konfirmasi Ya/Tidak responsif
 // Durasi haid default = 7 hari (bisa diubah lewat mandatory form)
 // DITAMBAH: Ovulasi untuk siklus sebelumnya dan siklus saat ini
+// PERBAIKAN: Ovulasi prediksi hanya untuk siklus ke-2 dst (tidak double dengan ovulasi siklus saat ini)
+// UPDATE: Prediksi AI sudah tersimpan di database, tidak perlu panggil API lagi
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -95,10 +97,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final cycle = cycleResult['cycle'];
         _lastPeriodDate = cycle.lastPeriodDate;
         _previousPeriodDate = cycle.previousPeriodDate;
+        // 🔥 PERUBAHAN: Langsung pakai cycleLengthDays dari database (hasil AI)
         _cycleLength = cycle.cycleLengthDays ?? 28;
         _predictedCycleLength = _cycleLength.toDouble();
-        _updatePredictionsManually();
-        await _tryGetPredictionFromAI(cycle);
+        _updatePredictionsManually(); // hitung prediksi manual berdasarkan _cycleLength
+        // ✅ TIDAK ADA PANGGILAN AI LAGI
         _calculateSummary();
         _generateEventsForMonth();
         _loadNotesForMonth();
@@ -132,29 +135,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_lastPeriodDate == null) return;
     _predictedNextPeriod = _lastPeriodDate!.add(Duration(days: _cycleLength + _predictionOffsetDays));
     _ovulationDate = _predictedNextPeriod!.subtract(const Duration(days: 14));
-  }
-
-  Future<void> _tryGetPredictionFromAI(dynamic cycle) async {
-    if (_lastPeriodDate == null) return;
-    try {
-      final result = await ApiService.predictCycle(
-        tanggalHaidTerakhir: _lastPeriodDate!.toIso8601String().split('T')[0],
-        tanggalHaidBulanSebelumnya: cycle.previousPeriodDate?.toIso8601String().split('T')[0],
-        painLevel: cycle.painLevel ?? 5,
-        stressScore: cycle.stressScoreCycle ?? 4,
-        sleepHours: cycle.sleepHoursCycle ?? 7,
-        moodScore: cycle.moodScore ?? 7,
-      );
-      if (result['success'] && mounted) {
-        setState(() {
-          _predictedCycleLength = result['data']['predicted_cycle_length'].toDouble();
-          _predictedNextPeriod = DateTime.parse(result['data']['next_period_date']).add(Duration(days: _predictionOffsetDays));
-          _ovulationDate = _predictedNextPeriod!.subtract(const Duration(days: 14));
-        });
-      }
-    } catch (e) {
-      debugPrint('AI prediction error: $e');
-    }
   }
   
   void _calculateSummary() {
@@ -221,7 +201,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
       
-      // === OVULASI SIklUS SEBELUMNYA (ungu) ===
+      // === OVULASI SIKLUS SEBELUMNYA (ungu) ===
       if (previousPeriodOnly != null) {
         DateTime prevOvulation = previousPeriodOnly.add(Duration(days: _cycleLength - 14));
         if (key.year == prevOvulation.year && key.month == prevOvulation.month && key.day == prevOvulation.day) {
@@ -256,17 +236,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       if (found) continue;
       
-      // OVULASI PREDIKSI (UNGU) untuk siklus berikutnya
-      cycleNumber = 1;
-      while (cycleNumber <= 100) {
-        DateTime predictedStart = lastPeriodOnly.add(Duration(days: (cycleNumber * safePredictedCycle).round() + _predictionOffsetDays));
+      // OVULASI PREDIKSI (UNGU) untuk siklus berikutnya (mulai dari siklus ke-2)
+      int cycleNumberOv = 2;
+      while (cycleNumberOv <= 100) {
+        DateTime predictedStart = lastPeriodOnly.add(Duration(days: (cycleNumberOv * safePredictedCycle).round() + _predictionOffsetDays));
         DateTime ovulation = predictedStart.subtract(const Duration(days: 14));
         if (key.year == ovulation.year && key.month == ovulation.month && key.day == ovulation.day) {
           events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
           break;
         }
-        if (key.isBefore(ovulation) && cycleNumber > 1) break;
-        cycleNumber++;
+        if (key.isBefore(ovulation) && cycleNumberOv > 1) break;
+        cycleNumberOv++;
       }
     }
     
@@ -555,22 +535,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8E8F0),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('MIRAI', style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(icon: const Icon(Icons.notifications_outlined, color: Colors.pink), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.person_outline, color: Colors.pink), onPressed: () {}),
-        ],
-      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.pink))
           : IndexedStack(
               index: _currentIndex,
               children: [
                 _buildDashboardContent(),
-                const DailyNoteScreen(),
                 const MiraiChatScreen(),
                 const ProfileScreen(),
               ],
@@ -583,7 +553,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: "Beranda"),
-          BottomNavigationBarItem(icon: Icon(Icons.description_outlined), label: "Catatan"),
           BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profil"),
         ],
@@ -619,7 +588,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 24),
             Container(
               width: 180, height: 180,
-              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.pink.withValues(alpha: 0.3), width: 12)),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.pink.withOpacity(0.3), width: 12)),
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Text('Hari ke-${_summaryData['currentDay']}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.pink)),
                 const Text('siklus', style: TextStyle(fontSize: 16, color: Colors.pink)),
@@ -635,7 +604,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.pink.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
+                  decoration: BoxDecoration(color: Colors.pink.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     const Icon(Icons.egg, color: Colors.pink, size: 18),
                     const SizedBox(width: 6),
@@ -773,7 +742,7 @@ class _LegendItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(width: 14, height: 14, decoration: BoxDecoration(color: isLight ? color.withValues(alpha: 0.3) : color, shape: BoxShape.circle)),
+      Container(width: 14, height: 14, decoration: BoxDecoration(color: isLight ? color.withOpacity(0.3) : color, shape: BoxShape.circle)),
       const SizedBox(width: 6),
       Text(label, style: const TextStyle(fontSize: 13)),
     ]);

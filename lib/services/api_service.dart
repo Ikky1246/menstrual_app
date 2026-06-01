@@ -14,7 +14,7 @@ class ApiService {
   }
 
   // ==============================================
-  // PREDIKSI DENGAN AI (VERSI TERBARU - MATCH DENGAN LARAVEL)
+  // PREDIKSI DENGAN AI (via Laravel)
   // ==============================================
   static Future<Map<String, dynamic>> predictCycle({
     required String tanggalHaidTerakhir,
@@ -34,7 +34,6 @@ class ApiService {
         };
       }
 
-      // Siapkan payload sesuai dengan yang dibutuhkan Laravel
       Map<String, dynamic> payload = {
         'tanggal_haid_terakhir': tanggalHaidTerakhir,
         'pain_level': painLevel,
@@ -42,16 +41,13 @@ class ApiService {
         'sleep_hours_cycle': sleepHours,
       };
       
-      // Optional fields (hanya tambahkan jika tidak null)
       if (tanggalHaidBulanSebelumnya != null && tanggalHaidBulanSebelumnya.isNotEmpty) {
         payload['tanggal_haid_bulan_sebelumnya'] = tanggalHaidBulanSebelumnya;
       }
-      
       if (moodScore != null) payload['mood_score'] = moodScore;
 
       print('📤 Sending prediction request to: ${AppConstants.baseUrl}/api/mobile/predict');
       print('📦 Payload: $payload');
-      print('🔑 Token: ${token.substring(0, math.min(20, token.length))}...');
 
       final response = await http.post(
         Uri.parse('${AppConstants.baseUrl}/api/mobile/predict'),
@@ -115,14 +111,8 @@ class ApiService {
   static Future<Map<String, dynamic>> checkAIHealth() async {
     try {
       final token = await _getToken();
-      
-      final headers = {
-        "Content-Type": "application/json",
-      };
-      
-      if (token != null) {
-        headers["Authorization"] = "Bearer $token";
-      }
+      final headers = {"Content-Type": "application/json"};
+      if (token != null) headers["Authorization"] = "Bearer $token";
       
       final response = await http.get(
         Uri.parse('${AppConstants.baseUrl}/api/mobile/predictions/health'),
@@ -145,23 +135,16 @@ class ApiService {
   static Future<List<dynamic>> getPredictionHistory() async {
     try {
       final token = await _getToken();
-      
-      if (token == null) {
-        return [];
-      }
+      if (token == null) return [];
       
       final response = await http.get(
         Uri.parse('${AppConstants.baseUrl}/api/mobile/predictions/history'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       ).timeout(AppDurations.apiTimeout);
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          return data['data'];
-        }
+        if (data['success'] == true) return data['data'];
       }
       return [];
     } catch (e) {

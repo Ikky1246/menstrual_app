@@ -13,6 +13,8 @@ class User {
   final double? weightKg;
   final double? heightCm;
   final double? bmi;
+  final bool? pcosDiagnosed;      // TAMBAH
+  final bool? birthControlUse;    // TAMBAH
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -29,6 +31,8 @@ class User {
     this.weightKg,
     this.heightCm,
     this.bmi,
+    this.pcosDiagnosed,           // TAMBAH
+    this.birthControlUse,         // TAMBAH
     this.createdAt,
     this.updatedAt,
   });
@@ -47,6 +51,8 @@ class User {
       weightKg: json['weight_kg']?.toDouble(),
       heightCm: json['height_cm']?.toDouble(),
       bmi: json['bmi']?.toDouble(),
+      pcosDiagnosed: json['pcos_diagnosed'] == 1,      // TAMBAH
+      birthControlUse: json['birth_control_use'] == 1, // TAMBAH
       createdAt: json['created_at'] != null 
           ? DateTime.tryParse(json['created_at']) 
           : null,
@@ -67,6 +73,8 @@ class User {
       if (age != null) 'age': age,
       if (weightKg != null) 'weight_kg': weightKg,
       if (heightCm != null) 'height_cm': heightCm,
+      if (pcosDiagnosed != null) 'pcos_diagnosed': pcosDiagnosed! ? 1 : 0, // TAMBAH
+      if (birthControlUse != null) 'birth_control_use': birthControlUse! ? 1 : 0, // TAMBAH
     };
   }
 
@@ -84,6 +92,8 @@ class User {
       'weight_kg': weightKg,
       'height_cm': heightCm,
       'bmi': bmi,
+      'pcos_diagnosed': pcosDiagnosed,          // TAMBAH
+      'birth_control_use': birthControlUse,    // TAMBAH
     };
   }
 
@@ -101,6 +111,8 @@ class User {
       weightKg: map['weight_kg']?.toDouble(),
       heightCm: map['height_cm']?.toDouble(),
       bmi: map['bmi']?.toDouble(),
+      pcosDiagnosed: map['pcos_diagnosed'] == true,           // TAMBAH
+      birthControlUse: map['birth_control_use'] == true,     // TAMBAH
     );
   }
 
@@ -127,6 +139,8 @@ class User {
     double? weightKg,
     double? heightCm,
     double? bmi,
+    bool? pcosDiagnosed,          // TAMBAH
+    bool? birthControlUse,        // TAMBAH
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -143,6 +157,8 @@ class User {
       weightKg: weightKg ?? this.weightKg,
       heightCm: heightCm ?? this.heightCm,
       bmi: bmi ?? this.bmi,
+      pcosDiagnosed: pcosDiagnosed ?? this.pcosDiagnosed,
+      birthControlUse: birthControlUse ?? this.birthControlUse,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -198,6 +214,8 @@ class UpdateProfileRequest {
   final int? age;
   final double? weightKg;
   final double? heightCm;
+  final bool? pcosDiagnosed;      // TAMBAH
+  final bool? birthControlUse;    // TAMBAH
 
   UpdateProfileRequest({
     this.namaLengkap,
@@ -205,6 +223,8 @@ class UpdateProfileRequest {
     this.age,
     this.weightKg,
     this.heightCm,
+    this.pcosDiagnosed,
+    this.birthControlUse,
   });
 
   Map<String, dynamic> toJson() {
@@ -214,6 +234,8 @@ class UpdateProfileRequest {
       if (age != null) 'age': age,
       if (weightKg != null) 'weight_kg': weightKg,
       if (heightCm != null) 'height_cm': heightCm,
+      if (pcosDiagnosed != null) 'pcos_diagnosed': pcosDiagnosed! ? 1 : 0,
+      if (birthControlUse != null) 'birth_control_use': birthControlUse! ? 1 : 0,
     };
   }
 }

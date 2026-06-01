@@ -8,7 +8,7 @@ import 'package:menstrual_app/screens/auth/forgot_password_screen.dart';
 import 'package:menstrual_app/screens/auth/verify_email_screen.dart';
 import 'package:menstrual_app/screens/auth/verify_otp_screen.dart';
 import 'package:menstrual_app/screens/auth/reset_password_screen.dart';
-import 'package:menstrual_app/screens/prediction_screen.dart';
+import 'package:menstrual_app/services/api_service.dart';
 import 'package:menstrual_app/services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -45,8 +45,7 @@ class MyApp extends StatelessWidget {
         '/dashboard': (context) => const DashboardScreen(),
         '/mandatory': (context) => const MandatoryFormScreen(),
         // HAPUS '/optional' dari sini karena butuh parameter
-        '/forgot-password': (context) => const ForgotPasswordScreen(),
-        '/prediction': (context) => const PredictionScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen()
       },
       onGenerateRoute: (settings) {
         // Untuk halaman dengan parameter
