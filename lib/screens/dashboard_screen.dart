@@ -1,9 +1,32 @@
 // lib/screens/dashboard_screen.dart
-// Fitur lengkap: merah haid aktual (termasuk siklus sebelumnya), pink prediksi geser, konfirmasi Ya/Tidak responsif
+// Fitur lengkap: merah haid aktual, pink prediksi geser, konfirmasi Ya/Tidak responsif
 // Durasi haid default = 7 hari (bisa diubah lewat mandatory form)
-// DITAMBAH: Ovulasi untuk siklus sebelumnya dan siklus saat ini
-// PERBAIKAN: Ovulasi prediksi hanya untuk siklus ke-2 dst (tidak double dengan ovulasi siklus saat ini)
-// UPDATE: Prediksi AI sudah tersimpan di database, tidak perlu panggil API lagi
+// Ovulasi menyesuaikan dengan prediksi terbaru
+// Panjang siklus yang ditampilkan = cycleLength (dari database/AI) tanpa offset
+// Offset hanya untuk menggeser tanggal prediksi, bukan mengubah panjang siklus
+//
+// REVISI:
+// - Popup konfirmasi haid muncul maksimal 1x/hari, terus berulang tiap hari sampai user konfirmasi
+// - Konfirmasi "Ya" membuka date picker (bukan langsung pakai tanggal prediksi)
+// - "Belum" menggeser prediksi dengan logika catch-up: prediksi baru = besok (hari ini + 1),
+//   bukan sekadar prediksi lama + 1, sehingga otomatis mengejar ketertinggalan jika user
+//   baru login beberapa hari setelah tanggal prediksi seharusnya
+// - Offset TIDAK lagi direset setiap kali _loadCycleData() dipanggil (misal saat pindah tab),
+//   hanya direset ketika data siklus dari server benar-benar berubah (siklus baru dikonfirmasi)
+// - "Hari ini" (hijau) selalu menimpa warna lain di kalender, termasuk merah (haid aktual)
+// - Dialog koreksi terpisah (_checkCorrectionNeeded dkk) dihapus karena sudah digantikan
+//   sepenuhnya oleh mekanisme popup harian dengan catch-up di atas
+//
+// REVISI 2 (perbaikan popup):
+// - Flag "sudah tampil" pakai key baru (_v2); flag lama yang keburu tersimpan &
+//   mem-blokir popup diabaikan
+// - Popup juga terpicu saat app kembali dari background (WidgetsBindingObserver),
+//   termasuk kalau app terbuka lewat tengah malam / dibuka kembali di tanggal prediksi
+// - Guard _isDialogShowing mencegah dialog dobel
+// - Ovulasi di summary SELALU pakai _findRelevantOvulationDate() supaya tidak
+//   menampilkan tanggal masa lalu setelah geser "Belum" dan tetap sinkron dengan
+//   titik ungu di kalender
+// - Log debugPrint (🔔/🔕/✅) di jalur popup supaya mudah melacak kenapa popup skip
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -12,7 +35,6 @@ import 'daily_note_screen.dart';
 import 'profile_screen.dart';
 import 'mirai_chat_screen.dart';
 import '../services/cycle_service.dart';
-import '../services/api_service.dart';
 import '../services/daily_note_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -22,7 +44,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
 
   DateTime _selectedDate = DateTime.now();
@@ -36,82 +58,120 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'nextPeriod': '-',
     'ovulationDate': '-',
   };
-  
+
   bool _isLoading = true;
   int _periodDuration = 7;
   DateTime? _lastPeriodDate;
   DateTime? _previousPeriodDate;
-  double _predictedCycleLength = 28;
+  int _cycleLength = 28;
   DateTime? _predictedNextPeriod;
   DateTime? _ovulationDate;
-  int _cycleLength = 28;
-  
+
   Map<DateTime, bool> _hasNoteDates = {};
-  bool _autoPopupShown = false;
   int _predictionOffsetDays = 0;
+  bool _isDialogShowing = false;
+
+  static const String _kPredictionOffsetKey = 'prediction_offset';
+  // v2: key baru supaya flag lama yang keburu tersimpan (dan mem-blokir popup) diabaikan
+  static const String _kLastPopupShownKey = 'last_popup_shown_date_v2';
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadPredictionOffset();
     _loadInitialData();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // User kembali ke app (atau lewat tengah malam saat app terbuka) → cek ulang popup
+      _checkAndShowDailyPopup();
+    }
+  }
+
+  // ========== INISIALISASI ==========
   Future<void> _loadInitialData() async {
     await _loadPeriodDuration();
     await _loadCycleData();
-    _checkCorrectionNeeded();
   }
 
+  // ========== HELPERS TANGGAL ==========
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  bool _isSameDate(DateTime a, DateTime b) {
+    final x = _dateOnly(a);
+    final y = _dateOnly(b);
+    return x.year == y.year && x.month == y.month && x.day == y.day;
+  }
+
+  // ========== OFFSET ==========
   Future<void> _loadPredictionOffset() async {
     final prefs = await SharedPreferences.getInstance();
-    _predictionOffsetDays = prefs.getInt('prediction_offset') ?? 0;
+    _predictionOffsetDays = prefs.getInt(_kPredictionOffsetKey) ?? 0;
   }
 
   Future<void> _savePredictionOffset() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('prediction_offset', _predictionOffsetDays);
+    await prefs.setInt(_kPredictionOffsetKey, _predictionOffsetDays);
   }
 
   Future<void> _resetPredictionOffset() async {
-    _predictionOffsetDays = 0;
-    await _savePredictionOffset();
+    if (_predictionOffsetDays != 0) {
+      _predictionOffsetDays = 0;
+      await _savePredictionOffset();
+    }
   }
 
+  // ========== DURASI HAID ==========
   Future<void> _loadPeriodDuration() async {
     final prefs = await SharedPreferences.getInstance();
     final duration = prefs.getInt('period_duration');
-    if (duration != null) {
-      setState(() => _periodDuration = duration);
-    } else {
-      setState(() => _periodDuration = 7);
-    }
-    debugPrint('🩸 Periode duration: $_periodDuration hari');
+    setState(() {
+      _periodDuration = duration ?? 7;
+    });
   }
 
+  // ========== LOAD DATA SIKLUS ==========
   Future<void> _loadCycleData() async {
     setState(() => _isLoading = true);
     try {
       final cycleResult = await CycleService.getLatestCycle();
       if (cycleResult['success'] && cycleResult['cycle'] != null) {
         final cycle = cycleResult['cycle'];
+
+        // Siklus baru terdeteksi hanya kalau lastPeriodDate dari server berubah
+        // dibanding yang sedang kita pegang. Ini penting: _loadCycleData() bisa
+        // terpanggil berkali-kali (mis. pindah tab), jadi offset yang sudah
+        // disimpan user TIDAK BOLEH ikut ter-reset di panggilan-panggilan itu.
+        final bool isNewCycle =
+            _lastPeriodDate == null || !_isSameDate(_lastPeriodDate!, cycle.lastPeriodDate);
+
         _lastPeriodDate = cycle.lastPeriodDate;
         _previousPeriodDate = cycle.previousPeriodDate;
-        // 🔥 PERUBAHAN: Langsung pakai cycleLengthDays dari database (hasil AI)
         _cycleLength = cycle.cycleLengthDays ?? 28;
-        _predictedCycleLength = _cycleLength.toDouble();
-        _updatePredictionsManually(); // hitung prediksi manual berdasarkan _cycleLength
-        // ✅ TIDAK ADA PANGGILAN AI LAGI
+
+        if (isNewCycle) {
+          await _resetPredictionOffset();
+        } else {
+          await _loadPredictionOffset();
+        }
+
+        // Hitung ulang semua prediksi
+        _updatePredictions();
         _calculateSummary();
         _generateEventsForMonth();
         _loadNotesForMonth();
 
-        if (!_autoPopupShown && _isTodayPrediction()) {
-          _autoPopupShown = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showPredictionDialog(DateTime.now());
-          });
-        }
+        // Popup konfirmasi haid: maksimal 1x per hari, berulang tiap hari sampai dikonfirmasi
+        await _checkAndShowDailyPopup();
       } else {
         if (mounted) _showNoDataDialog();
       }
@@ -123,45 +183,129 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  bool _isTodayPrediction() {
-    if (_lastPeriodDate == null) return false;
-    final today = DateTime.now();
-    final key = DateTime(today.year, today.month, today.day);
-    final event = _calendarEvents[key];
-    return event?.type == CalendarEventType.prediction;
+  // ========== POPUP HARIAN ==========
+  Future<void> _checkAndShowDailyPopup() async {
+    if (_predictedNextPeriod == null || !mounted || _isDialogShowing) return;
+
+    final todayOnly = _dateOnly(DateTime.now());
+    final predOnly = _dateOnly(_predictedNextPeriod!);
+
+    // Belum waktunya (prediksi masih di masa depan)
+    if (todayOnly.isBefore(predOnly)) {
+      debugPrint('🔕 Popup skip: hari ini $todayOnly, prediksi $predOnly (belum masuk)');
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final todayKey = DateFormat('yyyy-MM-dd').format(todayOnly);
+    final lastShown = prefs.getString(_kLastPopupShownKey);
+    debugPrint('🔔 Cek popup harian: today=$todayKey, lastShown=$lastShown');
+    if (lastShown == todayKey) return; // sudah tampil hari ini
+
+    await prefs.setString(_kLastPopupShownKey, todayKey);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _isDialogShowing) return;
+      _isDialogShowing = true;
+      try {
+        debugPrint('✅ Menampilkan popup konfirmasi haid');
+        await _showPredictionDialog(predOnly);
+      } finally {
+        _isDialogShowing = false;
+      }
+    });
   }
 
-  void _updatePredictionsManually() {
+  // ========== UPDATE PREDIKSI ==========
+  void _updatePredictions() {
     if (_lastPeriodDate == null) return;
-    _predictedNextPeriod = _lastPeriodDate!.add(Duration(days: _cycleLength + _predictionOffsetDays));
+    _predictedNextPeriod = _lastPeriodDate!.add(
+      Duration(days: _cycleLength + _predictionOffsetDays)
+    );
     _ovulationDate = _predictedNextPeriod!.subtract(const Duration(days: 14));
   }
-  
+
+  // Cari ovulasi berikutnya yang masih relevan (>= hari ini), dengan formula
+  // yang SAMA persis dengan yang dipakai _generateEventsForMonth() untuk
+  // menandai titik ungu di kalender. Ini memastikan teks "Ovulasi" di atas
+  // kalender selalu match dengan apa yang benar-benar tampil di kalender,
+  // baik sebelum maupun sesudah tanggal prediksi (setelah digeser sekalipun).
+  DateTime? _findRelevantOvulationDate() {
+    if (_lastPeriodDate == null) return null;
+    final base = _dateOnly(_lastPeriodDate!);
+    final today = _dateOnly(DateTime.now());
+
+    for (int n = 1; n <= 100; n++) {
+      final ovulation = base.add(Duration(days: (n * _cycleLength) + _predictionOffsetDays - 14));
+      if (!ovulation.isBefore(today)) {
+        return ovulation;
+      }
+    }
+    return _ovulationDate;
+  }
+
   void _calculateSummary() {
-    final today = DateTime.now();
-    int daysUntilNext = _predictedNextPeriod != null 
-        ? _predictedNextPeriod!.difference(today).inDays 
+    final today = _dateOnly(DateTime.now());
+
+    // rawDiff negatif berarti sudah lewat tanggal prediksi (overdue/terlambat)
+    int rawDiff = _predictedNextPeriod != null
+        ? _dateOnly(_predictedNextPeriod!).difference(today).inDays
         : 0;
-    if (daysUntilNext < 0) daysUntilNext = 0;
-    int currentDay = _lastPeriodDate != null 
-        ? today.difference(_lastPeriodDate!).inDays + 1
+
+    final bool isOverdue = rawDiff < 0;
+    final int daysUntilNext = isOverdue ? 0 : rawDiff;
+    final int overdueDays = isOverdue ? -rawDiff : 0;
+
+    int currentDay = _lastPeriodDate != null
+        ? today.difference(_dateOnly(_lastPeriodDate!)).inDays + 1
         : 1;
     if (currentDay < 1) currentDay = 1;
+
+    // Ovulasi yang ditampilkan SELALU ovulasi berikutnya yang masih relevan
+    // (>= hari ini) → sinkron dengan titik ungu di kalender, dan tidak pernah
+    // menampilkan tanggal masa lalu (termasuk setelah geser "Belum").
+    final DateTime? displayedOvulation = _findRelevantOvulationDate();
+
     setState(() {
       _summaryData = {
-        'avgCycleLength': _predictedCycleLength.round(),
+        // Panjang siklus efektif: cycleLength dasar + offset yang sudah
+        // digeser lewat popup "Belum Haid". Selama belum pernah digeser
+        // (offset 0) nilainya sama dengan cycleLength dari server seperti
+        // biasa; begitu user beberapa kali menjawab "Belum", angka ini ikut
+        // naik supaya mencerminkan siklus yang sedang berjalan lebih panjang
+        // dari rata-rata sebelumnya. Begitu haid dikonfirmasi, nilai ini
+        // digantikan oleh cycleLength baru dari server (offset direset ke 0).
+        'avgCycleLength': _cycleLength + _predictionOffsetDays,
         'daysUntilNext': daysUntilNext,
+        'isOverdue': isOverdue,
+        'overdueDays': overdueDays,
         'currentDay': currentDay,
-        'nextPeriod': _predictedNextPeriod != null 
-            ? DateFormat('dd MMMM yyyy', 'id').format(_predictedNextPeriod!)
-            : '-',
-        'ovulationDate': _ovulationDate != null
-            ? DateFormat('dd MMMM yyyy', 'id').format(_ovulationDate!)
+        'nextPeriod': _formatPredictionRange(),
+        'ovulationDate': displayedOvulation != null
+            ? DateFormat('dd MMMM yyyy', 'id').format(displayedOvulation)
             : '-',
       };
     });
   }
-  
+
+  // Prediksi haid ditampilkan sebagai RENTANG tanggal (sesuai _periodDuration),
+  // bukan cuma tanggal mulai — supaya selalu match dengan rentang pink yang
+  // benar-benar tampil di kalender.
+  String _formatPredictionRange() {
+    if (_predictedNextPeriod == null) return '-';
+    final start = _dateOnly(_predictedNextPeriod!);
+    final end = start.add(Duration(days: _periodDuration - 1));
+
+    final endStr = DateFormat('dd MMMM yyyy', 'id').format(end);
+    if (start.year == end.year && start.month == end.month) {
+      final startStr = DateFormat('dd', 'id').format(start);
+      return '$startStr - $endStr';
+    }
+    final startStr = DateFormat('dd MMMM yyyy', 'id').format(start);
+    return '$startStr - $endStr';
+  }
+
+  // ========== GENERATE KALENDER ==========
   void _generateEventsForMonth() {
     if (_lastPeriodDate == null) {
       setState(() => _calendarEvents = {});
@@ -172,18 +316,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final year = _selectedDate.year;
     final month = _selectedDate.month;
     final lastDayOfMonth = DateTime(year, month + 1, 0);
-    double safePredictedCycle = _predictedCycleLength.clamp(1.0, double.infinity);
-    
+
     final lastPeriodOnly = DateTime(_lastPeriodDate!.year, _lastPeriodDate!.month, _lastPeriodDate!.day);
     final previousPeriodOnly = _previousPeriodDate != null
         ? DateTime(_previousPeriodDate!.year, _previousPeriodDate!.month, _previousPeriodDate!.day)
         : null;
-    
+
     for (int day = 1; day <= lastDayOfMonth.day; day++) {
       final date = DateTime(year, month, day);
       final key = DateTime(date.year, date.month, date.day);
-      
-      // Cek haid sebelumnya (merah)
+
+      // --- HAID SEBELUMNYA (merah) ---
       if (previousPeriodOnly != null && key.isAfter(previousPeriodOnly.subtract(const Duration(days: 1)))) {
         int daysSincePrev = key.difference(previousPeriodOnly).inDays;
         if (daysSincePrev >= 0 && daysSincePrev < _periodDuration) {
@@ -191,8 +334,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           continue;
         }
       }
-      
-      // Cek haid saat ini (merah)
+
+      // --- HAID SAAT INI (merah) ---
       if (key.isAfter(lastPeriodOnly.subtract(const Duration(days: 1)))) {
         int daysSinceLast = key.difference(lastPeriodOnly).inDays;
         if (daysSinceLast >= 0 && daysSinceLast < _periodDuration) {
@@ -200,29 +343,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
           continue;
         }
       }
-      
-      // === OVULASI SIKLUS SEBELUMNYA (ungu) ===
+
+      // --- OVULASI SIKLUS SEBELUMNYA (ungu) ---
       if (previousPeriodOnly != null) {
         DateTime prevOvulation = previousPeriodOnly.add(Duration(days: _cycleLength - 14));
         if (key.year == prevOvulation.year && key.month == prevOvulation.month && key.day == prevOvulation.day) {
           events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
         }
       }
-      
-      // === OVULASI SIKLUS SAAT INI (aktual, tanpa offset) ===
+
+      // --- OVULASI SIKLUS SAAT INI (ungu) ---
       DateTime currentOvulation = lastPeriodOnly.add(Duration(days: _cycleLength - 14));
       if (key.year == currentOvulation.year && key.month == currentOvulation.month && key.day == currentOvulation.day) {
         events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
       }
-      
-      // Prediksi hanya untuk tanggal >= lastPeriodDate
+
+      // --- PREDIKSI HAID (pink) ---
       if (key.isBefore(lastPeriodOnly)) continue;
-      
-      // PREDIKSI HAID (PINK)
+
       int cycleNumber = 1;
       bool found = false;
       while (!found && cycleNumber <= 100) {
-        DateTime predictedStart = lastPeriodOnly.add(Duration(days: (cycleNumber * safePredictedCycle).round() + _predictionOffsetDays));
+        DateTime predictedStart = lastPeriodOnly.add(
+          Duration(days: (cycleNumber * _cycleLength).round() + _predictionOffsetDays)
+        );
+        if (predictedStart.isAfter(lastDayOfMonth) && cycleNumber > 1) break;
+
         if (key.isAfter(predictedStart.subtract(const Duration(days: 1)))) {
           DateTime predictedEnd = predictedStart.add(Duration(days: _periodDuration - 1));
           if (key.isBefore(predictedEnd.add(const Duration(days: 1)))) {
@@ -235,108 +381,165 @@ class _DashboardScreenState extends State<DashboardScreen> {
         cycleNumber++;
       }
       if (found) continue;
-      
-      // OVULASI PREDIKSI (UNGU) untuk siklus berikutnya (mulai dari siklus ke-2)
+
+      // --- OVULASI PREDIKSI (ungu) untuk siklus berikutnya ---
       int cycleNumberOv = 2;
       while (cycleNumberOv <= 100) {
-        DateTime predictedStart = lastPeriodOnly.add(Duration(days: (cycleNumberOv * safePredictedCycle).round() + _predictionOffsetDays));
+        DateTime predictedStart = lastPeriodOnly.add(
+          Duration(days: (cycleNumberOv * _cycleLength).round() + _predictionOffsetDays)
+        );
+        if (predictedStart.isAfter(lastDayOfMonth) && cycleNumberOv > 2) break;
         DateTime ovulation = predictedStart.subtract(const Duration(days: 14));
         if (key.year == ovulation.year && key.month == ovulation.month && key.day == ovulation.day) {
           events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
           break;
         }
-        if (key.isBefore(ovulation) && cycleNumberOv > 1) break;
+        if (key.isBefore(ovulation) && cycleNumberOv > 2) break;
         cycleNumberOv++;
       }
     }
-    
+
     setState(() => _calendarEvents = events);
   }
-  
+
+  // ========== GESER PREDIKSI (Belum Haid) ==========
+  // Prediksi baru selalu = besok (hari ini + 1), dihitung dari baseline
+  // (lastPeriodDate + cycleLength, TANPA offset lama). Ini otomatis
+  // "mengejar" kalau user baru login beberapa hari setelah tanggal
+  // prediksi yang seharusnya, bukan cuma +1 dari prediksi lama.
   Future<void> _shiftPredictionForward() async {
+    if (_lastPeriodDate == null) return;
+
+    final todayOnly = _dateOnly(DateTime.now());
+    final tomorrow = todayOnly.add(const Duration(days: 1));
+    final baselinePredicted = _dateOnly(_lastPeriodDate!).add(Duration(days: _cycleLength));
+
     setState(() {
-      _predictionOffsetDays++;
-      _predictedNextPeriod = _predictedNextPeriod!.add(Duration(days: 1));
-      _ovulationDate = _ovulationDate!.add(Duration(days: 1));
+      _predictionOffsetDays = tomorrow.difference(baselinePredicted).inDays;
+      _updatePredictions();
       _calculateSummary();
       _generateEventsForMonth();
     });
     await _savePredictionOffset();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Prediksi digeser 1 hari ke depan'), backgroundColor: Colors.orange),
+        SnackBar(
+          content: Text(
+            '✅ Prediksi digeser ke ${DateFormat('dd MMMM yyyy', 'id').format(_predictedNextPeriod!)}',
+          ),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
       );
-    }
-  }
-  
-  Future<void> _confirmPeriodStart(DateTime predictedDate) async {
-    if (mounted) {
-      setState(() => _isLoading = true);
-      try {
-        int newCycleLength = predictedDate.difference(_lastPeriodDate!).inDays;
-        if (newCycleLength < 21) newCycleLength = 21;
-        if (newCycleLength > 45) newCycleLength = 45;
-        
-        final lastPeriodStr = predictedDate.toIso8601String().split('T')[0];
-        final previousPeriodStr = _lastPeriodDate!.toIso8601String().split('T')[0];
-        
-        await _resetPredictionOffset();
-        
-        final result = await CycleService.saveCycle(
-          lastPeriodDate: lastPeriodStr,
-          previousPeriodDate: previousPeriodStr,
-          cycleLengthDays: newCycleLength,
-          painLevel: 5,
-          stressScoreCycle: 4,
-          sleepHoursCycle: 7,
-          moodScore: 7,
-        );
-        
-        if (result['success'] && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Haid dikonfirmasi! Data siklus diperbarui.'), backgroundColor: Colors.green),
-          );
-          await _loadCycleData();
-        } else {
-          throw Exception('Gagal menyimpan');
+      if (_predictedNextPeriod != null) {
+        final nextMonth = DateTime(_predictedNextPeriod!.year, _predictedNextPeriod!.month, 1);
+        if (_selectedDate.year != nextMonth.year || _selectedDate.month != nextMonth.month) {
+          setState(() {
+            _selectedDate = nextMonth;
+          });
+          _generateEventsForMonth();
+          _loadNotesForMonth();
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Gagal update: $e'), backgroundColor: Colors.red),
-          );
-        }
-        setState(() => _isLoading = false);
       }
     }
   }
 
+  // ========== KONFIRMASI HAID (Ya) ==========
+  // Siklus baru dimulai pada tanggal yang dipilih user:
+  // - last_period_date = tanggal mulai haid yang dipilih
+  // - previous_period_date = haid lama
+  // - panjang siklus = selisih aktual (clamp 21–45)
+  // Kalender langsung menampilkan merah 7 hari (_periodDuration) mulai tanggal
+  // itu, dan ovulasi dihitung ulang dari siklus baru via _loadCycleData().
+  Future<void> _confirmPeriodStart(DateTime actualDate) async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      int newCycleLength = actualDate.difference(_lastPeriodDate!).inDays;
+      if (newCycleLength < 21) newCycleLength = 21;
+      if (newCycleLength > 45) newCycleLength = 45;
+
+      final lastPeriodStr = actualDate.toIso8601String().split('T')[0];
+      final previousPeriodStr = _lastPeriodDate!.toIso8601String().split('T')[0];
+
+      await _resetPredictionOffset();
+
+      final result = await CycleService.saveCycle(
+        lastPeriodDate: lastPeriodStr,
+        previousPeriodDate: previousPeriodStr,
+        cycleLengthDays: newCycleLength,
+        painLevel: 5,
+        stressScoreCycle: 4,
+        sleepHoursCycle: 7,
+        moodScore: 7,
+      );
+
+      if (result['success'] && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Haid dikonfirmasi! Data siklus diperbarui.'), backgroundColor: Colors.green),
+        );
+        await _loadCycleData();
+      } else {
+        throw Exception('Gagal menyimpan');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal update: $e'), backgroundColor: Colors.red),
+        );
+      }
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ========== POPUP KONFIRMASI HARIAN ==========
+  // "Ya" -> buka date picker (rentang: tanggal prediksi s/d hari ini) agar user
+  // bisa memilih tanggal pasti mulai haidnya, bukan otomatis pakai tanggal prediksi.
+  // "Belum" -> geser prediksi (lihat _shiftPredictionForward).
   Future<void> _showPredictionDialog(DateTime predictedDate) async {
+    if (!mounted) return;
+    
     final action = await showDialog<String>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Konfirmasi Haid'),
-        content: Text('Apakah Anda mengalami haid pada tanggal ${DateFormat('dd MMMM yyyy', 'id').format(predictedDate)}?'),
+        content: const Text('Apakah Anda sudah mengalami haid?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, 'shift'),
-            child: const Text('Belum, Geser'),
+            child: const Text('Belum'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, 'confirm'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Ya, Saya Haid'),
+            child: const Text('Ya'),
           ),
         ],
       ),
     );
-    if (action == 'confirm') {
-      await _confirmPeriodStart(predictedDate);
-    } else if (action == 'shift') {
+
+    debugPrint('🩸 Popup konfirmasi haid → user memilih: $action');
+
+    if (action == 'confirm' && mounted) {
+      final today = DateTime.now();
+      final pickedDate = await showDatePicker(
+        context: context,
+        initialDate: predictedDate,
+        firstDate: predictedDate,
+        lastDate: today,
+        helpText: 'Pilih tanggal mulai haid',
+      );
+      if (pickedDate != null && mounted) {
+        await _confirmPeriodStart(pickedDate);
+      }
+    } else if (action == 'shift' && mounted) {
       await _shiftPredictionForward();
     }
   }
-  
+
+  // ========== LAINNYA ==========
   Future<void> _loadNotesForMonth() async {
     if (!mounted) return;
     try {
@@ -357,65 +560,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('Error loading notes: $e');
     }
   }
-  
+
   void _changeMonth(int delta) {
     setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + delta, 1));
     _generateEventsForMonth();
     _loadNotesForMonth();
-  }
-  
-  Future<void> _checkCorrectionNeeded() async {
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    if (_lastPeriodDate == null) return;
-    final today = DateTime.now();
-    if (today.difference(_lastPeriodDate!).inDays > _cycleLength + 5) {
-      _showCorrectionNeededDialog();
-    }
-  }
-
-  void _showCorrectionNeededDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Konfirmasi Siklus'),
-        content: const Text('Apakah Anda sudah mengalami haid?'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        actions: [
-          TextButton(onPressed: () { Navigator.pop(context); _showDatePickerForCorrection(); }, child: const Text('Sudah')),
-          TextButton(onPressed: () { Navigator.pop(context); }, child: const Text('Belum')),
-        ],
-      ),
-    );
-  }
-
-  void _showDatePickerForCorrection() async {
-    final selectedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 10)),
-      lastDate: DateTime.now(),
-    );
-    if (selectedDate != null) _saveCorrection(selectedDate);
-  }
-
-  Future<void> _saveCorrection(DateTime actualStartDate) async {
-    try {
-      final result = await CycleService.getLatestCycle();
-      if (result['success'] && result['cycle'] != null && mounted) {
-        final cycle = result['cycle'];
-        await CycleService.submitCorrection(
-          expectedStartDate: cycle.lastPeriodDate.add(Duration(days: _cycleLength)),
-          actualStartDate: actualStartDate,
-          correctionType: 'start',
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data siklus diperbarui'), backgroundColor: Colors.green));
-          await _loadCycleData();
-        }
-      }
-    } catch (e) { debugPrint('Correction error: $e'); }
   }
 
   void _showNoDataDialog() {
@@ -443,25 +592,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  // ========== BOTTOM SHEET INFO TANGGAL ==========
   void _showDateInfoSheet(DateTime date) {
+    if (!mounted) return;
+    
     final event = _calendarEvents[DateTime(date.year, date.month, date.day)];
     bool hasNote = _hasNoteDates[date] == true;
     String formattedDate = DateFormat('EEEE, dd MMMM yyyy', 'id').format(date);
     String status = '';
     Color statusColor = Colors.grey;
     IconData statusIcon = Icons.circle_outlined;
-    
+
     if (event != null) {
       switch (event.type) {
         case CalendarEventType.menstruation:
-          status = 'Haid'; statusColor = Colors.red; statusIcon = Icons.favorite; break;
+          status = 'Haid';
+          statusColor = Colors.red;
+          statusIcon = Icons.favorite;
+          break;
         case CalendarEventType.ovulation:
-          status = 'Masa Ovulasi'; statusColor = Colors.purple; statusIcon = Icons.egg; break;
+          status = 'Masa Ovulasi';
+          statusColor = Colors.purple;
+          statusIcon = Icons.egg;
+          break;
         case CalendarEventType.prediction:
-          status = 'Prediksi Haid'; statusColor = Colors.pink; statusIcon = Icons.calendar_month; break;
+          status = 'Prediksi Haid';
+          statusColor = Colors.pink;
+          statusIcon = Icons.calendar_month;
+          break;
       }
     }
-    
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -471,15 +632,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
+            Center(
+              child: Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
             Text(formattedDate, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 15),
-            if (status.isNotEmpty) Row(children: [Icon(statusIcon, color: statusColor), const SizedBox(width: 10), Text(status, style: TextStyle(color: statusColor))]),
+            if (status.isNotEmpty)
+              Row(
+                children: [
+                  Icon(statusIcon, color: statusColor),
+                  const SizedBox(width: 10),
+                  Text(status, style: TextStyle(color: statusColor)),
+                ],
+              ),
             const SizedBox(height: 10),
-            Row(children: [Icon(Icons.edit_note, color: Colors.pink), const SizedBox(width: 10), Text(hasNote ? 'Ada catatan' : 'Belum ada catatan', style: TextStyle(color: hasNote ? Colors.green : Colors.grey))]),
+            Row(
+              children: [
+                Icon(Icons.edit_note, color: Colors.pink),
+                const SizedBox(width: 10),
+                Text(
+                  hasNote ? 'Ada catatan' : 'Belum ada catatan',
+                  style: TextStyle(color: hasNote ? Colors.green : Colors.grey),
+                ),
+              ],
+            ),
             const SizedBox(height: 20),
-            
+
             if (event?.type == CalendarEventType.prediction)
               Column(
                 children: [
@@ -492,7 +678,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       },
                       icon: const Icon(Icons.check_circle),
                       label: const Text('Ya, Saya Haid'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -505,19 +694,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       },
                       icon: const Icon(Icons.arrow_forward),
                       label: const Text('Belum, Geser Prediksi'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
                 ],
               ),
-            
+
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => DailyNoteScreen(initialDate: date))).then((_) => _loadNotesForMonth());
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => DailyNoteScreen(initialDate: date)),
+                  ).then((_) => _loadNotesForMonth());
                 },
                 icon: const Icon(Icons.edit_note),
                 label: const Text('Buat Catatan'),
@@ -550,7 +745,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         selectedItemColor: Colors.pink,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+          // Refresh data saat kembali ke tab Beranda
+          if (index == 0) {
+            _loadCycleData();
+          }
+        },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: "Beranda"),
           BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
@@ -560,19 +761,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildComingSoonScreen(String title, String message) {
-    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(Icons.construction, size: 64, color: Colors.grey.shade400),
-      const SizedBox(height: 16),
-      Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 8),
-      Text(message, style: TextStyle(color: Colors.grey.shade600)),
-    ]));
-  }
-
   Widget _buildDashboardContent() {
     return RefreshIndicator(
-      onRefresh: () async { await _loadCycleData(); _generateEventsForMonth(); },
+      onRefresh: () async {
+        await _loadCycleData();
+        _generateEventsForMonth();
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -580,56 +774,117 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                Expanded(child: _buildInfoCard(title: 'PANJANG SIKLUS', value: '${_summaryData['avgCycleLength']}', unit: 'hari')),
+                Expanded(
+                  child: _buildInfoCard(
+                    title: 'PANJANG SIKLUS',
+                    value: '${_summaryData['avgCycleLength']}',
+                    unit: 'hari',
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: _buildInfoCard(title: 'HAID BERIKUTNYA', value: '${_summaryData['daysUntilNext']}', unit: 'hari lagi')),
+                Expanded(
+                  child: _buildInfoCard(
+                    title: 'HAID BERIKUTNYA',
+                    value: (_summaryData['isOverdue'] == true)
+                        ? '${_summaryData['overdueDays']}'
+                        : '${_summaryData['daysUntilNext']}',
+                    unit: (_summaryData['isOverdue'] == true) ? 'hari terlambat' : 'hari lagi',
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
             Container(
-              width: 180, height: 180,
-              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.pink.withOpacity(0.3), width: 12)),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text('Hari ke-${_summaryData['currentDay']}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.pink)),
-                const Text('siklus', style: TextStyle(fontSize: 16, color: Colors.pink)),
-              ]),
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.pink.withAlpha(77), width: 12),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Hari ke-${_summaryData['currentDay']}',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.pink),
+                  ),
+                  const Text('siklus', style: TextStyle(fontSize: 16, color: Colors.pink)),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30)),
-              child: Column(children: [
-                const Text('Prediksi Haid Berikutnya:', style: TextStyle(fontSize: 16)),
-                Text(_summaryData['nextPeriod'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.pink)),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.pink.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.egg, color: Colors.pink, size: 18),
-                    const SizedBox(width: 6),
-                    Text('Ovulasi: ${_summaryData['ovulationDate']}', style: const TextStyle(color: Colors.pink)),
-                  ]),
-                ),
-              ]),
+              child: Column(
+                children: [
+                  const Text('Prediksi Haid Berikutnya:', style: TextStyle(fontSize: 16)),
+                  Text(
+                    _summaryData['nextPeriod'],
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.pink),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.pink.withAlpha(26),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.egg, color: Colors.pink, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Ovulasi: ${_summaryData['ovulationDate']}',
+                          style: const TextStyle(color: Colors.pink),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 24),
             Container(
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
               padding: const EdgeInsets.all(16),
-              child: Column(children: [
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _changeMonth(-1)),
-                  Text(_dateFormat.format(_selectedDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _changeMonth(1)),
-                ]),
-                const SizedBox(height: 12),
-                const Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                  Text('Sen'), Text('Sel'), Text('Rab'), Text('Kam'), Text('Jum'), Text('Sab'), Text('Min')
-                ]),
-                const SizedBox(height: 8),
-                _buildCalendarGrid(),
-              ]),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: () => _changeMonth(-1),
+                      ),
+                      Text(
+                        _dateFormat.format(_selectedDate),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: () => _changeMonth(1),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Text('Sen'),
+                      Text('Sel'),
+                      Text('Rab'),
+                      Text('Kam'),
+                      Text('Jum'),
+                      Text('Sab'),
+                      Text('Min'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildCalendarGrid(),
+                ],
+              ),
             ),
             const SizedBox(height: 24),
             Wrap(
@@ -647,10 +902,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyNoteScreen())).then((_) => _loadNotesForMonth()),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DailyNoteScreen()),
+                ).then((_) => _loadNotesForMonth()),
                 icon: const Icon(Icons.edit_note),
-                label: const Text('Catatan Harian', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.pink, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                label: const Text(
+                  'Catatan Harian',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.pink,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                ),
               ),
             ),
           ],
@@ -663,12 +929,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-      child: Column(children: [
-        Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.pink)),
-        Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
-      ]),
+      child: Column(
+        children: [
+          Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Text(value, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.pink)),
+          Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+        ],
+      ),
     );
   }
 
@@ -687,42 +955,86 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 1),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+        childAspectRatio: 1,
+      ),
       itemCount: totalCells,
       itemBuilder: (context, index) {
         final date = days[index];
         if (date == null) return Container();
-        return GestureDetector(onTap: () => _showDateInfoSheet(date), child: _buildCalendarDay(date));
+        return GestureDetector(
+          onTap: () => _showDateInfoSheet(date),
+          child: _buildCalendarDay(date),
+        );
       },
     );
   }
 
   Widget _buildCalendarDay(DateTime date) {
-    final isToday = date.year == DateTime.now().year && date.month == DateTime.now().month && date.day == DateTime.now().day;
+    final isToday = date.year == DateTime.now().year &&
+        date.month == DateTime.now().month &&
+        date.day == DateTime.now().day;
     final event = _calendarEvents[DateTime(date.year, date.month, date.day)];
     final hasNote = _hasNoteDates[date] == true;
-    
+
     Color? bgColor;
     Color textColor = Colors.black87;
-    if (event != null) {
+
+    // "Hari ini" selalu hijau, menimpa warna lain (termasuk merah kalau
+    // hari ini kebetulan termasuk hari haid yang sudah terkonfirmasi).
+    if (isToday) {
+      bgColor = Colors.green;
+      textColor = Colors.white;
+    } else if (event != null) {
       switch (event.type) {
-        case CalendarEventType.menstruation: bgColor = Colors.red; textColor = Colors.white; break;
-        case CalendarEventType.ovulation: bgColor = Colors.purple; textColor = Colors.white; break;
-        case CalendarEventType.prediction: bgColor = Colors.pink.shade100; textColor = Colors.black87; break;
+        case CalendarEventType.menstruation:
+          bgColor = Colors.red;
+          textColor = Colors.white;
+          break;
+        case CalendarEventType.ovulation:
+          bgColor = Colors.purple;
+          textColor = Colors.white;
+          break;
+        case CalendarEventType.prediction:
+          bgColor = Colors.pink.shade100;
+          textColor = Colors.black87;
+          break;
       }
     }
-    if (isToday && event == null) { bgColor = Colors.green; textColor = Colors.white; }
-    
+
     return Container(
       margin: const EdgeInsets.all(2),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Container(width: 38, height: 38, decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
-            child: Center(child: Text(date.day.toString(), style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)))),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+            child: Center(
+              child: Text(
+                date.day.toString(),
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
           if (hasNote)
-            Positioned(bottom: 0, right: 0,
-              child: Icon(Icons.edit_note, size: 10, color: bgColor == Colors.red || bgColor == Colors.purple ? Colors.white : Colors.pink)),
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Icon(
+                Icons.edit_note,
+                size: 10,
+                color: bgColor == Colors.red || bgColor == Colors.purple || bgColor == Colors.green
+                    ? Colors.white
+                    : Colors.pink,
+              ),
+            ),
         ],
       ),
     );
@@ -737,14 +1049,31 @@ class CalendarEventData {
 }
 
 class _LegendItem extends StatelessWidget {
-  final Color color; final String label; final bool isLight;
-  const _LegendItem({required this.color, required this.label, this.isLight = false});
+  final Color color;
+  final String label;
+  final bool isLight;
+  const _LegendItem({
+    required this.color,
+    required this.label,
+    this.isLight = false,
+  });
+
   @override
   Widget build(BuildContext context) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(width: 14, height: 14, decoration: BoxDecoration(color: isLight ? color.withOpacity(0.3) : color, shape: BoxShape.circle)),
-      const SizedBox(width: 6),
-      Text(label, style: const TextStyle(fontSize: 13)),
-    ]);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: isLight ? color.withAlpha(77) : color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 13)),
+      ],
+    );
   }
 }
