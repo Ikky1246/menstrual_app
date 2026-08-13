@@ -25,13 +25,13 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   // ============================================
   final _lastPeriodController = TextEditingController();
   final _previousPeriodController = TextEditingController();
-  
+
   // FIELD YANG DIPERLUKAN MODEL
-  double _painLevel = 5;           // WAJIB (0-10)
-  double _stressLevel = 4;         // WAJIB (0-10)
-  double _sleepHours = 7;          // WAJIB (0-24)
-  double _moodLevel = 7;           // OPSIONAL (1-10)
-  
+  double _painLevel = 5; // WAJIB (0-10)
+  double _stressLevel = 4; // WAJIB (0-10)
+  double _sleepHours = 7; // WAJIB (0-24)
+  double _moodLevel = 7; // OPSIONAL (1-10)
+
   // Field tambahan (disimpan untuk info)
   final _periodDurationController = TextEditingController();
 
@@ -58,7 +58,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   // ============================================
   // HELPER FUNCTIONS
   // ============================================
-  
+
   String _getPainLabel(double value) {
     if (value <= 2) return 'Tidak sakit';
     if (value <= 4) return 'Sedikit sakit';
@@ -66,7 +66,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     if (value <= 8) return 'Nyeri berat';
     return 'Sangat berat';
   }
-  
+
   String _getStressLabel(double value) {
     if (value <= 2) return 'Sangat rileks';
     if (value <= 4) return 'Sedikit stres';
@@ -74,16 +74,16 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     if (value <= 8) return 'Stres berat';
     return 'Sangat stres';
   }
-  
+
   // Hitung persentase slider untuk visualisasi progress bar
   double _getPainPercentage() {
     return _painLevel / 10;
   }
-  
+
   double _getStressPercentage() {
     return _stressLevel / 10;
   }
-  
+
   double _getSleepPercentage() {
     return (_sleepHours - 4) / 6; // min 4, max 10
   }
@@ -113,7 +113,10 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     );
 
     if (picked != null) {
-      String displayDate = DateFormat(AppConstants.dateFormatDisplay, 'id').format(picked);
+      String displayDate = DateFormat(
+        AppConstants.dateFormatDisplay,
+        'id',
+      ).format(picked);
       controller.text = displayDate;
       onDateSelected(picked);
       setState(() {});
@@ -125,12 +128,15 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    
+
     // Validasi tanggal harus diisi
     if (_lastPeriodDate == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tanggal haid terakhir wajib diisi'), backgroundColor: AppColors.error),
+          const SnackBar(
+            content: Text('Tanggal haid terakhir wajib diisi'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
       return;
@@ -145,7 +151,9 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         throw Exception('User tidak ditemukan. Silakan login kembali.');
       }
 
-      String lastPeriodFormatted = DateFormat(AppConstants.dateFormatApi).format(_lastPeriodDate!);
+      String lastPeriodFormatted = DateFormat(
+        AppConstants.dateFormatApi,
+      ).format(_lastPeriodDate!);
       String? previousPeriodFormatted = _previousPeriodDate != null
           ? DateFormat(AppConstants.dateFormatApi).format(_previousPeriodDate!)
           : null;
@@ -153,7 +161,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
       final result = await CycleService.saveCycle(
         lastPeriodDate: lastPeriodFormatted,
         previousPeriodDate: previousPeriodFormatted,
-        cycleLengthDays: 28,  // Nilai default sementara
+        cycleLengthDays: 28, // Nilai default sementara
         painLevel: _painLevel.toInt(),
         stressScoreCycle: _stressLevel.toInt(),
         sleepHoursCycle: _sleepHours,
@@ -162,15 +170,20 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
       if (result['success'] == true) {
         final cycleData = result['data'];
-        
-        _savedCycleMongoId = cycleData['id']?.toString() ?? 
-                             cycleData['id_cycle']?.toString() ?? 
-                             cycleData['_id']?.toString();
-        
+        _savedCycleMongoId =
+            cycleData['id']?.toString() ??
+            cycleData['id_cycle']?.toString() ??
+            cycleData['_id']?.toString();
+
         final prefs = await SharedPreferences.getInstance();
         if (_savedCycleMongoId != null) {
           await prefs.setString('latest_cycle_id', _savedCycleMongoId!);
         }
+        // ⬇️ TAMBAHKAN baris ini:
+        await prefs.setBool(
+          'has_cycle_data',
+          true,
+        ); // <-- flag mandatory selesai
 
         if (mounted) {
           setState(() => _isLoading = false);
@@ -225,9 +238,11 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              
+
               Future.delayed(const Duration(milliseconds: 150), () {
-                if (mounted && _savedCycleMongoId != null && _lastPeriodDate != null) {
+                if (mounted &&
+                    _savedCycleMongoId != null &&
+                    _lastPeriodDate != null) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -236,7 +251,8 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         lastPeriodDate: _lastPeriodDate!,
                         previousPeriodDate: _previousPeriodDate,
                         cycleLengthDays: 28,
-                        periodDurationDays: int.tryParse(_periodDurationController.text) ?? 5,
+                        periodDurationDays:
+                            int.tryParse(_periodDurationController.text) ?? 5,
                         painLevel: _painLevel.toInt(),
                         stressLevel: _stressLevel.toInt(),
                         sleepHours: _sleepHours,
@@ -257,7 +273,9 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             child: const Text('Isi Sekarang'),
           ),
@@ -269,12 +287,12 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   // ============================================
   // BUILD UI - DESAIN SESUAI HTML (OVERFLOW FIXED)
   // ============================================
-  
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final sliderWidth = screenWidth * 0.7; // 70% dari lebar layar untuk slider
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFf4fafd),
       appBar: PreferredSize(
@@ -387,7 +405,11 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               // Data Tanggal Section
               Row(
                 children: [
-                  const Icon(Icons.calendar_month, color: Color(0xFFb80049), size: 20),
+                  const Icon(
+                    Icons.calendar_month,
+                    color: Color(0xFFb80049),
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   const Text(
                     'DATA TANGGAL',
@@ -401,7 +423,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              
+
               // Tanggal Haid Terakhir
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -422,17 +444,25 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                     child: TextFormField(
                       controller: _lastPeriodController,
                       readOnly: true,
-                      onTap: () => _selectDate(context, _lastPeriodController, (date) {
-                        _lastPeriodDate = date;
-                      }),
+                      onTap: () =>
+                          _selectDate(context, _lastPeriodController, (date) {
+                            _lastPeriodDate = date;
+                          }),
                       decoration: InputDecoration(
                         hintText: 'Pilih tanggal',
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        suffixIcon: const Icon(Icons.event, color: Color(0xFFb80049)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        suffixIcon: const Icon(
+                          Icons.event,
+                          color: Color(0xFFb80049),
+                        ),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) return 'Tanggal haid terakhir wajib diisi';
+                        if (value == null || value.isEmpty)
+                          return 'Tanggal haid terakhir wajib diisi';
                         return null;
                       },
                     ),
@@ -440,7 +470,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              
+
               // Tanggal Haid Sebelumnya
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,14 +491,24 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                     child: TextFormField(
                       controller: _previousPeriodController,
                       readOnly: true,
-                      onTap: () => _selectDate(context, _previousPeriodController, (date) {
-                        _previousPeriodDate = date;
-                      }),
+                      onTap: () => _selectDate(
+                        context,
+                        _previousPeriodController,
+                        (date) {
+                          _previousPeriodDate = date;
+                        },
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Pilih tanggal (Opsional)',
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        suffixIcon: const Icon(Icons.calendar_today, color: Color(0xFF5b3f43)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        suffixIcon: const Icon(
+                          Icons.calendar_today,
+                          color: Color(0xFF5b3f43),
+                        ),
                       ),
                     ),
                   ),
@@ -476,7 +516,11 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                     padding: EdgeInsets.only(left: 4, top: 4),
                     child: Text(
                       'Kosongkan jika tidak tahu (akan menggunakan default 28 hari).',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF5b3f43), fontStyle: FontStyle.italic),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF5b3f43),
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 ],
@@ -486,7 +530,11 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               // Kondisi Tubuh Section
               Row(
                 children: [
-                  const Icon(Icons.monitor_heart, color: Color(0xFFb80049), size: 20),
+                  const Icon(
+                    Icons.monitor_heart,
+                    color: Color(0xFFb80049),
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   const Text(
                     'KONDISI TUBUH',
@@ -524,18 +572,29 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         const Expanded(
                           child: Text(
                             'Tingkat Nyeri',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
+                            ),
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFf4dce4),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             _getPainLabel(_painLevel),
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFFb80049)),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFFb80049),
+                            ),
                           ),
                         ),
                       ],
@@ -567,7 +626,9 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                 top: 0,
                                 child: GestureDetector(
                                   onHorizontalDragUpdate: (details) {
-                                    final newValue = (details.localPosition.dx / sliderWidth).clamp(0.0, 1.0);
+                                    final newValue =
+                                        (details.localPosition.dx / sliderWidth)
+                                            .clamp(0.0, 1.0);
                                     setState(() {
                                       _painLevel = newValue * 10;
                                     });
@@ -577,11 +638,16 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                     height: 24,
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFb80049),
-                                      border: Border.all(color: Colors.white, width: 4),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 4,
+                                      ),
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.1),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           blurRadius: 4,
                                         ),
                                       ],
@@ -596,8 +662,20 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: const [
-                            Text('Tidak sakit', style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43))),
-                            Text('Sangat sakit', style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43))),
+                            Text(
+                              'Tidak sakit',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                            Text(
+                              'Sangat sakit',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -630,18 +708,29 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         const Expanded(
                           child: Text(
                             'Tingkat Stres',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
+                            ),
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFffd9e4),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             _getStressLabel(_stressLevel),
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF890f50)),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF890f50),
+                            ),
                           ),
                         ),
                       ],
@@ -669,11 +758,14 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                 ),
                               ),
                               Positioned(
-                                left: (sliderWidth * _getStressPercentage()) - 12,
+                                left:
+                                    (sliderWidth * _getStressPercentage()) - 12,
                                 top: 0,
                                 child: GestureDetector(
                                   onHorizontalDragUpdate: (details) {
-                                    final newValue = (details.localPosition.dx / sliderWidth).clamp(0.0, 1.0);
+                                    final newValue =
+                                        (details.localPosition.dx / sliderWidth)
+                                            .clamp(0.0, 1.0);
                                     setState(() {
                                       _stressLevel = newValue * 10;
                                     });
@@ -683,11 +775,16 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                     height: 24,
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFc5447f),
-                                      border: Border.all(color: Colors.white, width: 4),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 4,
+                                      ),
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.1),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           blurRadius: 4,
                                         ),
                                       ],
@@ -702,8 +799,20 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: const [
-                            Text('Rileks', style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43))),
-                            Text('Sangat stres', style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43))),
+                            Text(
+                              'Rileks',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                            Text(
+                              'Sangat stres',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -736,18 +845,29 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         const Expanded(
                           child: Text(
                             'Rata-rata Tidur',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
+                            ),
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFe2e9ec),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             '${_sleepHours.toStringAsFixed(1)} jam',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF161d1f)),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
+                            ),
                           ),
                         ),
                       ],
@@ -775,11 +895,14 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                 ),
                               ),
                               Positioned(
-                                left: (sliderWidth * _getSleepPercentage()) - 12,
+                                left:
+                                    (sliderWidth * _getSleepPercentage()) - 12,
                                 top: 0,
                                 child: GestureDetector(
                                   onHorizontalDragUpdate: (details) {
-                                    final newValue = (details.localPosition.dx / sliderWidth).clamp(0.0, 1.0);
+                                    final newValue =
+                                        (details.localPosition.dx / sliderWidth)
+                                            .clamp(0.0, 1.0);
                                     setState(() {
                                       _sleepHours = 4 + (newValue * 6);
                                     });
@@ -789,11 +912,16 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                     height: 24,
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF716066),
-                                      border: Border.all(color: Colors.white, width: 4),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 4,
+                                      ),
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.1),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           blurRadius: 4,
                                         ),
                                       ],
@@ -808,8 +936,20 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: const [
-                            Text('Kurang', style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43))),
-                            Text('Sangat cukup', style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43))),
+                            Text(
+                              'Kurang',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                            Text(
+                              'Sangat cukup',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -853,10 +993,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         SizedBox(height: 8),
                         Text(
                           'Setiap siklus memberikan petunjuk unik tentang kesehatan hormonalmu.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
+                          style: TextStyle(fontSize: 14, color: Colors.white70),
                         ),
                       ],
                     ),
@@ -903,7 +1040,9 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFb80049),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 elevation: 15,
                 shadowColor: const Color(0xFFb80049).withValues(alpha: 0.3),
               ),
@@ -914,7 +1053,10 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                       children: [
                         Text(
                           'Simpan & Lanjutkan',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         SizedBox(width: 8),
                         Icon(Icons.arrow_forward, size: 20),

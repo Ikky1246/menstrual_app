@@ -12,9 +12,12 @@ import 'package:menstrual_app/services/api_service.dart';
 import 'package:menstrual_app/services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   await initializeDateFormatting('id', null);
   runApp(const MyApp());
 }
@@ -109,9 +112,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (mounted) {
       if (isLoggedIn) {
-        final user = await AuthService.getCurrentUser();
+        // Cek apakah user sudah mengisi data siklus (mandatory)
         final hasCycleData = await _hasCycleData();
-
         if (hasCycleData) {
           Navigator.pushReplacementNamed(context, '/dashboard');
         } else {
@@ -126,8 +128,8 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<bool> _hasCycleData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final hasCycle = prefs.getBool('has_cycle_data') ?? false;
-      return hasCycle;
+      // Cek flag yang disimpan saat mandatory selesai
+      return prefs.getBool('has_cycle_data') ?? false;
     } catch (e) {
       return false;
     }
@@ -141,42 +143,20 @@ class _SplashScreenState extends State<SplashScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.pink.shade300,
-              Colors.pink.shade100,
-            ],
+            colors: [Colors.pink.shade300, Colors.pink.shade100],
           ),
         ),
         child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.favorite,
-                size: 80,
-                color: Colors.white,
-              ),
+              Icon(Icons.favorite, size: 80, color: Colors.white),
               SizedBox(height: 20),
-              Text(
-                'MIRAI',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
+              Text('MIRAI', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
               SizedBox(height: 10),
-              Text(
-                'Catatan Siklus Haidmu',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
-                ),
-              ),
+              Text('Catatan Siklus Haidmu', style: TextStyle(fontSize: 16, color: Colors.white70)),
               SizedBox(height: 40),
-              CircularProgressIndicator(
-                color: Colors.white,
-              ),
+              CircularProgressIndicator(color: Colors.white),
             ],
           ),
         ),

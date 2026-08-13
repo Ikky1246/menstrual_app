@@ -1,5 +1,8 @@
 // lib/screens/onboarding/optional_form_screen.dart
 // VERSION FINAL - DENGAN PREDIKSI AI & INPUT WAJIB USIA, PCOS, KB
+// REVISI: fix RenderFlex overflow pada heading "Data Tambahan (Wajib untuk
+// prediksi akurat)" — Text fontSize 20 dibungkus Expanded supaya tidak
+// mendorong keluar batas Row di layar sempit.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -342,16 +345,20 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
             const SizedBox(height: 48),
 
             // Data Tambahan (Wajib untuk prediksi akurat)
+            // FIX: Text dibungkus Expanded supaya tidak overflow di layar sempit
+            // (sebelumnya RenderFlex overflowed by 71 pixels on the right).
             Row(
               children: [
                 const Icon(Icons.edit_note, color: Color(0xFFb80049), size: 20),
                 const SizedBox(width: 8),
-                const Text(
-                  'Data Tambahan (Wajib untuk prediksi akurat)',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF161d1f),
+                const Expanded(
+                  child: Text(
+                    'Data Tambahan (Wajib untuk prediksi akurat)',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF161d1f),
+                    ),
                   ),
                 ),
               ],

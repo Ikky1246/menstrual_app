@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cycle_model.dart';
 import '../utils/constants.dart';
 import 'auth_service.dart';
-import 'api_service.dart';  // ← TAMBAHKAN import ApiService
+import 'api_service.dart';
 import 'package:flutter/foundation.dart';
 
 class CycleService {
@@ -14,17 +14,12 @@ class CycleService {
     }
   }
 
-  // ==============================================
-  // GET TOKEN
-  // ==============================================
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString(AppConstants.keyToken);
-    
     if (token == null) {
       token = prefs.getString('token');
     }
-    
     return token;
   }
 
@@ -48,6 +43,7 @@ class CycleService {
 
       _log('📤 Saving cycle data...');
       _log('   last_period_date: $lastPeriodDate');
+      _log('   cycle_length_days: $cycleLengthDays');
 
       final Map<String, dynamic> payload = {
         'last_period_date': lastPeriodDate,
@@ -134,11 +130,10 @@ class CycleService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
         if (data['success'] == true && data['data'] != null) {
           try {
             final cycle = CycleData.fromJson(data['data'] as Map<String, dynamic>);
-            _log('✅ Cycle parsed successfully: id=${cycle.id}, cycleLength=${cycle.cycleLengthDays}');
+            _log('✅ Cycle parsed: id=${cycle.id}, cycleLength=${cycle.cycleLengthDays}, lastPeriod=${cycle.lastPeriodDate}');
             return {'success': true, 'cycle': cycle};
           } catch (e) {
             _log('❌ Error parsing cycle: $e');
@@ -158,62 +153,22 @@ class CycleService {
   }
 
   // ==============================================
-  // GET ALL CYCLES
+  // UPDATE CYCLE (dengan cycleLengthDays)
   // ==============================================
-  static Future<Map<String, dynamic>> getAllCycles() async {
-    try {
-      final token = await _getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Token tidak ditemukan', 'cycles': []};
-      }
-
-      final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/cycles'),
-        headers: {
-          "Accept": "application/json",
-          "Authorization": "Bearer $token",
-        },
-      ).timeout(AppDurations.apiTimeout);
-
-      final data = jsonDecode(response.body);
-      _log('📊 Get all cycles response: ${response.statusCode}');
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        List<CycleData> cycles = [];
-        
-        final List<dynamic> cyclesData = data['data'] ?? [];
-        for (var item in cyclesData) {
-          try {
-            cycles.add(CycleData.fromJson(item as Map<String, dynamic>));
-          } catch (e) {
-            _log('❌ Error parsing cycle item: $e');
-          }
-        }
-        
-        return {'success': true, 'cycles': cycles};
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Gagal mengambil data',
-          'cycles': []
-        };
-      }
-    } catch (e) {
-      _log('❌ Error getting cycles: $e');
-      return {'success': false, 'message': 'Error: $e', 'cycles': []};
-    }
-  }
-
-  // ==============================================
-  // UPDATE CYCLE (tambah parameter cycleLengthDays)
-  // ==============================================
+  // REVISI: menambahkan lastPeriodDate & previousPeriodDate sebagai parameter
+  // opsional. Sebelumnya method ini TIDAK PERNAH mengirim kedua tanggal ini
+  // ke server, sehingga updateCycleWithPrediction() (dipanggil dari halaman
+  // optional form) tidak pernah benar-benar menyimpan previous_period_date
+  // walau tanggal itu sudah dipakai untuk request prediksi ke Python.
   static Future<Map<String, dynamic>> updateCycle({
     required String cycleId,
+    String? lastPeriodDate,
+    String? previousPeriodDate,
     int? painLevel,
     int? stressScoreCycle,
     double? sleepHoursCycle,
     int? moodScore,
-    int? cycleLengthDays,      // ← TAMBAHKAN parameter ini
+    int? cycleLengthDays,
   }) async {
     try {
       final token = await _getToken();
@@ -222,15 +177,17 @@ class CycleService {
       }
 
       final Map<String, dynamic> payload = {};
+      if (lastPeriodDate != null) payload['last_period_date'] = lastPeriodDate;
+      if (previousPeriodDate != null) payload['previous_period_date'] = previousPeriodDate;
       if (painLevel != null) payload['pain_level'] = painLevel;
       if (stressScoreCycle != null) payload['stress_score_cycle'] = stressScoreCycle;
       if (sleepHoursCycle != null) payload['sleep_hours_cycle'] = sleepHoursCycle;
       if (moodScore != null) payload['mood_score'] = moodScore;
-      if (cycleLengthDays != null) payload['cycle_length_days'] = cycleLengthDays; // ← TAMBAH
+      if (cycleLengthDays != null) payload['cycle_length_days'] = cycleLengthDays;
 
       final url = '${AppConstants.baseUrl}/api/mobile/cycle/$cycleId';
       
-      _log('📤 Update cycle URL: $url');
+      _log('📤 UPDATE CYCLE URL: $url');
       _log('📤 Payload: $payload');
 
       final response = await http.put(
@@ -263,6 +220,8 @@ class CycleService {
         if (refreshed) {
           return await updateCycle(
             cycleId: cycleId,
+            lastPeriodDate: lastPeriodDate,
+            previousPeriodDate: previousPeriodDate,
             painLevel: painLevel,
             stressScoreCycle: stressScoreCycle,
             sleepHoursCycle: sleepHoursCycle,
@@ -285,7 +244,7 @@ class CycleService {
   }
 
   // ==============================================
-  // UPDATE CYCLE WITH AI PREDICTION (BARU)
+  // UPDATE CYCLE WITH AI PREDICTION
   // ==============================================
   static Future<Map<String, dynamic>> updateCycleWithPrediction({
     required String cycleId,
@@ -301,6 +260,8 @@ class CycleService {
     required int birthControlUse,
   }) async {
     try {
+      _log('🧠 Starting AI prediction update for cycle: $cycleId');
+
       // 1. Panggil AI prediksi
       final predResult = await ApiService.predictCycle(
         tanggalHaidTerakhir: lastPeriodDate,
@@ -317,22 +278,89 @@ class CycleService {
         predictedCycleLength = (data['predicted_cycle_length'] as num).round();
         predictedCycleLength = predictedCycleLength.clamp(20, 45);
         _log('🎯 AI predicted cycle length: $predictedCycleLength');
+        _log('📅 Next period date from AI: ${data['next_period_date']}');
       } else {
-        _log('⚠️ AI prediction failed, using default 28');
+        _log('⚠️ AI prediction failed: ${predResult['message']}');
+        _log('⚠️ Using default cycle length: 28');
       }
 
       // 2. Update cycle dengan hasil prediksi
-      return await updateCycle(
+      // REVISI: sekarang ikut mengirim lastPeriodDate & previousPeriodDate,
+      // supaya tanggal yang sudah dipakai untuk prediksi AI benar-benar
+      // tersimpan di record cycle, bukan cuma dipakai sekali pakai untuk
+      // hitung prediksi lalu hilang.
+      _log('📤 Sending update with cycleLengthDays: $predictedCycleLength');
+      final updateResult = await updateCycle(
         cycleId: cycleId,
+        lastPeriodDate: lastPeriodDate,
+        previousPeriodDate: previousPeriodDate,
         painLevel: painLevel,
         stressScoreCycle: stressScoreCycle,
         sleepHoursCycle: sleepHoursCycle,
         moodScore: moodScore,
         cycleLengthDays: predictedCycleLength,
       );
+
+      _log('📊 Update result: ${updateResult['success']}');
+      if (updateResult['success']) {
+        _log('✅ Cycle updated successfully with AI prediction: $predictedCycleLength hari');
+        // Log data dari response jika ada
+        if (updateResult['data'] != null) {
+          _log('📦 Updated cycle data: ${updateResult['data']}');
+        }
+      } else {
+        _log('❌ Gagal update cycle: ${updateResult['message']}');
+      }
+
+      return updateResult;
     } catch (e) {
       _log('❌ updateCycleWithPrediction error: $e');
       return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  // ==============================================
+  // GET ALL CYCLES
+  // ==============================================
+  static Future<Map<String, dynamic>> getAllCycles() async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'Token tidak ditemukan', 'cycles': []};
+      }
+
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/cycles'),
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(AppDurations.apiTimeout);
+
+      final data = jsonDecode(response.body);
+      _log('📊 Get all cycles response: ${response.statusCode}');
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        List<CycleData> cycles = [];
+        final List<dynamic> cyclesData = data['data'] ?? [];
+        for (var item in cyclesData) {
+          try {
+            cycles.add(CycleData.fromJson(item as Map<String, dynamic>));
+          } catch (e) {
+            _log('❌ Error parsing cycle item: $e');
+          }
+        }
+        return {'success': true, 'cycles': cycles};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Gagal mengambil data',
+          'cycles': []
+        };
+      }
+    } catch (e) {
+      _log('❌ Error getting cycles: $e');
+      return {'success': false, 'message': 'Error: $e', 'cycles': []};
     }
   }
 
@@ -358,18 +386,11 @@ class CycleService {
 
       final data = jsonDecode(response.body);
       _log('📊 Delete cycle response: ${response.statusCode}');
-      _log('📊 Response body: ${response.body}');
 
       if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'message': 'Data siklus berhasil dihapus'
-        };
+        return {'success': true, 'message': 'Data siklus berhasil dihapus'};
       } else if (response.statusCode == 404) {
-        return {
-          'success': false,
-          'message': 'Data siklus tidak ditemukan'
-        };
+        return {'success': false, 'message': 'Data siklus tidak ditemukan'};
       } else if (response.statusCode == 401) {
         final refreshed = await AuthService.refreshToken();
         if (refreshed) {
@@ -378,10 +399,7 @@ class CycleService {
           return {'success': false, 'message': 'Sesi habis, silakan login kembali'};
         }
       } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Gagal hapus data siklus'
-        };
+        return {'success': false, 'message': data['message'] ?? 'Gagal hapus data siklus'};
       }
     } catch (e) {
       _log('❌ Error deleting cycle: $e');

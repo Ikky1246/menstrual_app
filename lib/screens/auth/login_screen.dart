@@ -1,7 +1,10 @@
+// lib/screens/auth/login_screen.dart
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:menstrual_app/screens/auth/register_screen.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
 import 'package:menstrual_app/screens/auth/forgot_password_screen.dart';
+import 'package:menstrual_app/screens/onboarding/mandatory_form_screen.dart'; // <-- TAMBAHKAN
 import 'package:menstrual_app/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -44,10 +47,21 @@ class _LoginScreenState extends State<LoginScreen> {
         });
 
         if (result['success']) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const DashboardScreen()),
-          );
+          // Cek apakah user sudah memiliki data siklus
+          final prefs = await SharedPreferences.getInstance();
+          final hasCycleData = prefs.getBool('has_cycle_data') ?? false;
+
+          if (hasCycleData) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const DashboardScreen()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const MandatoryFormScreen()),
+            );
+          }
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -76,12 +90,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        color: Colors.pink, // Background luar pink
+        color: Colors.pink,
         child: Center(
           child: Container(
             margin: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white, // Background dalam putih
+              color: Colors.white,
               borderRadius: BorderRadius.circular(30),
               boxShadow: [
                 BoxShadow(
@@ -101,7 +115,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const SizedBox(height: 40),
 
-                      // Icon Love
                       Container(
                         width: 80,
                         height: 80,
@@ -118,7 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       const SizedBox(height: 24),
 
-                      // Title - Selamat Datang Kembali! (dipisah jadi 2 baris)
                       const Text(
                         'Selamat Datang',
                         style: TextStyle(
@@ -140,7 +152,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Subtitle
                       Text(
                         'Senang melihatmu lagi. Yuk lanjutkan catatan siklusmu!',
                         textAlign: TextAlign.center,
@@ -153,12 +164,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       const SizedBox(height: 40),
 
-                      // Form
                       Form(
                         key: _formKey,
                         child: Column(
                           children: [
-                            // Email Field
                             TextFormField(
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
@@ -215,7 +224,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             const SizedBox(height: 16),
 
-                            // Password Field
                             TextFormField(
                               controller: _passwordController,
                               obscureText: !_isPasswordVisible,
@@ -278,7 +286,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             const SizedBox(height: 20),
 
-                            // Ingat saya (Checkbox saja, tanpa Lupa password di baris yang sama)
                             Row(
                               children: [
                                 Checkbox(
@@ -312,7 +319,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             const SizedBox(height: 8),
 
-                            // Lupa password (dipisah sendiri)
                             Align(
                               alignment: Alignment.centerLeft,
                               child: TextButton(
@@ -346,7 +352,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             const SizedBox(height: 30),
 
-                            // Login Button
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -385,7 +390,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       const SizedBox(height: 30),
 
-                      // Register link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -419,7 +423,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       const SizedBox(height: 30),
 
-                      // Footer
                       Text(
                         '© 2024 MIRAI Wellness Companion. Semua hak dilindungi.',
                         textAlign: TextAlign.center,
