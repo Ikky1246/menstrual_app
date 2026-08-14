@@ -1,3 +1,4 @@
+import 'dart:ui';
 // lib/screens/auth/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +7,14 @@ import 'package:menstrual_app/screens/dashboard_screen.dart';
 import 'package:menstrual_app/screens/auth/forgot_password_screen.dart';
 import 'package:menstrual_app/screens/onboarding/mandatory_form_screen.dart'; // <-- TAMBAHKAN
 import 'package:menstrual_app/services/auth_service.dart';
+
+// ==== Palet warna sakura (samain dgn desain HTML) ====
+class SakuraColors {
+  static const primary = Color(0xFFEC1E63);
+  static const light = Color(0xFFFFD3E0);
+  static const bg = Color(0xFFFFF0F5);
+  static const dark = Color(0xFFC2185B);
+}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -30,6 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // ===== LOGIKA TIDAK DIUBAH SAMA SEKALI =====
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -66,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result['message'] ?? 'Login berhasil! 💕'),
-              backgroundColor: Colors.pink,
+              backgroundColor: SakuraColors.primary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -85,6 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
   }
+  // ===== AKHIR LOGIKA =====
 
   @override
   Widget build(BuildContext context) {
@@ -209,20 +220,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                 filled: true,
                                 fillColor: Colors.pink.shade50,
                               ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Email tidak boleh kosong';
-                                }
-                                if (!RegExp(
-                                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                                ).hasMatch(value)) {
-                                  return 'Format email tidak valid';
-                                }
-                                return null;
-                              },
                             ),
+                            child: const Icon(
+                              Icons.favorite,
+                              size: 36,
+                              color: SakuraColors.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 28),
 
-                            const SizedBox(height: 16),
+                          // Judul
+                          const Text(
+                            'Selamat Datang\nKembali!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 28,
+                              height: 1.2,
+                              fontWeight: FontWeight.bold,
+                              color: SakuraColors.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
 
                             TextFormField(
                               controller: _passwordController,
@@ -273,16 +291,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                 filled: true,
                                 fillColor: Colors.pink.shade50,
                               ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Password tidak boleh kosong';
-                                }
-                                if (value.length < 6) {
-                                  return 'Password minimal 6 karakter';
-                                }
-                                return null;
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
                               },
                             ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Password tidak boleh kosong';
+                              }
+                              if (value.length < 6) {
+                                return 'Password minimal 6 karakter';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
 
                             const SizedBox(height: 20),
 
@@ -332,23 +357,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                   );
                                 },
                                 style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 0,
-                                  ),
+                                  padding: EdgeInsets.zero,
                                   minimumSize: Size.zero,
                                   tapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                 ),
-                                child: Text(
-                                  'Lupa password?',
+                                child: const Text(
+                                  'Lupa sandi?',
                                   style: TextStyle(
-                                    color: Colors.pink.shade700,
                                     fontSize: 14,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.bold,
+                                    color: SakuraColors.primary,
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
 
                             const SizedBox(height: 30),
 
@@ -363,65 +388,39 @@ class _LoginScreenState extends State<LoginScreen> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  elevation: 2,
-                                  disabledBackgroundColor: Colors.grey.shade400,
                                 ),
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text(
-                                        'Login',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
 
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'Belum punya akun? ',
+                            '© 2026 MIRAI Wellness Companion. Semua hak dilindungi.',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
                               color: Colors.grey.shade600,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const RegisterScreen(),
-                                ),
-                              );
-                            },
-                            child: Text(
-                              'Daftar sekarang',
-                              style: TextStyle(
-                                color: Colors.pink.shade700,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
                             ),
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-                      const SizedBox(height: 30),
+// ============ Widget-widget bantu tampilan ============
 
                       Text(
                         '© 2024 MIRAI Wellness Companion. Semua hak dilindungi.',
@@ -431,11 +430,52 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.grey.shade400,
                         ),
                       ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
+/// Dekorasi petal sakura statis, meniru .sakura-petal
+class _SakuraPetal extends StatelessWidget {
+  final double? top;
+  final double? bottom;
+  final double? left;
+  final double? right;
+  final double size;
+  final double opacity;
+
+  const _SakuraPetal({
+    this.top,
+    this.bottom,
+    this.left,
+    this.right,
+    required this.size,
+    required this.opacity,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
+      child: Opacity(
+        opacity: opacity,
+        child: Transform.rotate(
+          angle: 0.785398, // 45 derajat
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: SakuraColors.primary.withOpacity(0.15),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(15),
+                bottomRight: Radius.circular(15),
               ),
             ),
           ),

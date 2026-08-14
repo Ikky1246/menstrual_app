@@ -319,7 +319,11 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
 
     final lastPeriodOnly = DateTime(_lastPeriodDate!.year, _lastPeriodDate!.month, _lastPeriodDate!.day);
     final previousPeriodOnly = _previousPeriodDate != null
-        ? DateTime(_previousPeriodDate!.year, _previousPeriodDate!.month, _previousPeriodDate!.day)
+        ? DateTime(
+            _previousPeriodDate!.year,
+            _previousPeriodDate!.month,
+            _previousPeriodDate!.day,
+          )
         : null;
 
     for (int day = 1; day <= lastDayOfMonth.day; day++) {
@@ -346,9 +350,16 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
 
       // --- OVULASI SIKLUS SEBELUMNYA (ungu) ---
       if (previousPeriodOnly != null) {
-        DateTime prevOvulation = previousPeriodOnly.add(Duration(days: _cycleLength - 14));
-        if (key.year == prevOvulation.year && key.month == prevOvulation.month && key.day == prevOvulation.day) {
-          events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
+        DateTime prevOvulation = previousPeriodOnly.add(
+          Duration(days: _cycleLength - 14),
+        );
+        if (key.year == prevOvulation.year &&
+            key.month == prevOvulation.month &&
+            key.day == prevOvulation.day) {
+          events.putIfAbsent(
+            key,
+            () => CalendarEventData(type: CalendarEventType.ovulation),
+          );
         }
       }
 
@@ -370,7 +381,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         if (predictedStart.isAfter(lastDayOfMonth) && cycleNumber > 1) break;
 
         if (key.isAfter(predictedStart.subtract(const Duration(days: 1)))) {
-          DateTime predictedEnd = predictedStart.add(Duration(days: _periodDuration - 1));
+          DateTime predictedEnd = predictedStart.add(
+            Duration(days: _periodDuration - 1),
+          );
           if (key.isBefore(predictedEnd.add(const Duration(days: 1)))) {
             events[key] = CalendarEventData(type: CalendarEventType.prediction);
             found = true;
@@ -390,8 +403,13 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         );
         if (predictedStart.isAfter(lastDayOfMonth) && cycleNumberOv > 2) break;
         DateTime ovulation = predictedStart.subtract(const Duration(days: 14));
-        if (key.year == ovulation.year && key.month == ovulation.month && key.day == ovulation.day) {
-          events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
+        if (key.year == ovulation.year &&
+            key.month == ovulation.month &&
+            key.day == ovulation.day) {
+          events.putIfAbsent(
+            key,
+            () => CalendarEventData(type: CalendarEventType.ovulation),
+          );
           break;
         }
         if (key.isBefore(ovulation) && cycleNumberOv > 2) break;
@@ -543,14 +561,21 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   Future<void> _loadNotesForMonth() async {
     if (!mounted) return;
     try {
-      final result = await DailyNoteService.getNotesForMonth(_selectedDate.year, _selectedDate.month);
+      final result = await DailyNoteService.getNotesForMonth(
+        _selectedDate.year,
+        _selectedDate.month,
+      );
       if (result['success'] && result['notes'] != null && mounted) {
         final notesMap = result['notes'] as Map<String, bool>;
         final notesDates = <DateTime, bool>{};
         for (var entry in notesMap.entries) {
           final dateParts = entry.key.split('-');
           if (dateParts.length == 3) {
-            final date = DateTime(int.parse(dateParts[0]), int.parse(dateParts[1]), int.parse(dateParts[2]));
+            final date = DateTime(
+              int.parse(dateParts[0]),
+              int.parse(dateParts[1]),
+              int.parse(dateParts[2]),
+            );
             notesDates[date] = true;
           }
         }
@@ -576,7 +601,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         builder: (context) => AlertDialog(
           title: const Text('Belum Ada Data'),
           content: const Text('Silakan isi data siklus terlebih dahulu.'),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           actions: [
             ElevatedButton(
               onPressed: () {
@@ -625,7 +652,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => Container(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -643,7 +672,10 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               ),
             ),
             const SizedBox(height: 20),
-            Text(formattedDate, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              formattedDate,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 15),
             if (status.isNotEmpty)
               Row(
@@ -753,9 +785,18 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: "Beranda"),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profil"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            label: "Beranda",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            label: "Chat",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: "Profil",
+          ),
         ],
       ),
     );
@@ -847,7 +888,10 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
             ),
             const SizedBox(height: 24),
             Container(
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
@@ -894,7 +938,11 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               children: const [
                 _LegendItem(color: Colors.red, label: 'Haid'),
                 _LegendItem(color: Colors.purple, label: 'Ovulasi'),
-                _LegendItem(color: Colors.pink, label: 'Prediksi', isLight: true),
+                _LegendItem(
+                  color: Colors.pink,
+                  label: 'Prediksi',
+                  isLight: true,
+                ),
                 _LegendItem(color: Colors.green, label: 'Hari ini'),
               ],
             ),
@@ -925,7 +973,11 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     );
   }
 
-  Widget _buildInfoCard({required String title, required String value, required String unit}) {
+  Widget _buildInfoCard({
+    required String title,
+    required String value,
+    required String unit,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
