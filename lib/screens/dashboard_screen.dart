@@ -44,8 +44,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
-    with WidgetsBindingObserver {
+class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
 
   DateTime _selectedDate = DateTime.now();
@@ -153,8 +152,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         // terpanggil berkali-kali (mis. pindah tab), jadi offset yang sudah
         // disimpan user TIDAK BOLEH ikut ter-reset di panggilan-panggilan itu.
         final bool isNewCycle =
-            _lastPeriodDate == null ||
-            !_isSameDate(_lastPeriodDate!, cycle.lastPeriodDate);
+            _lastPeriodDate == null || !_isSameDate(_lastPeriodDate!, cycle.lastPeriodDate);
 
         _lastPeriodDate = cycle.lastPeriodDate;
         _previousPeriodDate = cycle.previousPeriodDate;
@@ -194,9 +192,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     // Belum waktunya (prediksi masih di masa depan)
     if (todayOnly.isBefore(predOnly)) {
-      debugPrint(
-        '🔕 Popup skip: hari ini $todayOnly, prediksi $predOnly (belum masuk)',
-      );
+      debugPrint('🔕 Popup skip: hari ini $todayOnly, prediksi $predOnly (belum masuk)');
       return;
     }
 
@@ -224,7 +220,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _updatePredictions() {
     if (_lastPeriodDate == null) return;
     _predictedNextPeriod = _lastPeriodDate!.add(
-      Duration(days: _cycleLength + _predictionOffsetDays),
+      Duration(days: _cycleLength + _predictionOffsetDays)
     );
     _ovulationDate = _predictedNextPeriod!.subtract(const Duration(days: 14));
   }
@@ -240,9 +236,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final today = _dateOnly(DateTime.now());
 
     for (int n = 1; n <= 100; n++) {
-      final ovulation = base.add(
-        Duration(days: (n * _cycleLength) + _predictionOffsetDays - 14),
-      );
+      final ovulation = base.add(Duration(days: (n * _cycleLength) + _predictionOffsetDays - 14));
       if (!ovulation.isBefore(today)) {
         return ovulation;
       }
@@ -323,11 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final month = _selectedDate.month;
     final lastDayOfMonth = DateTime(year, month + 1, 0);
 
-    final lastPeriodOnly = DateTime(
-      _lastPeriodDate!.year,
-      _lastPeriodDate!.month,
-      _lastPeriodDate!.day,
-    );
+    final lastPeriodOnly = DateTime(_lastPeriodDate!.year, _lastPeriodDate!.month, _lastPeriodDate!.day);
     final previousPeriodOnly = _previousPeriodDate != null
         ? DateTime(
             _previousPeriodDate!.year,
@@ -341,8 +331,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       final key = DateTime(date.year, date.month, date.day);
 
       // --- HAID SEBELUMNYA (merah) ---
-      if (previousPeriodOnly != null &&
-          key.isAfter(previousPeriodOnly.subtract(const Duration(days: 1)))) {
+      if (previousPeriodOnly != null && key.isAfter(previousPeriodOnly.subtract(const Duration(days: 1)))) {
         int daysSincePrev = key.difference(previousPeriodOnly).inDays;
         if (daysSincePrev >= 0 && daysSincePrev < _periodDuration) {
           events[key] = CalendarEventData(type: CalendarEventType.menstruation);
@@ -375,16 +364,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
 
       // --- OVULASI SIKLUS SAAT INI (ungu) ---
-      DateTime currentOvulation = lastPeriodOnly.add(
-        Duration(days: _cycleLength - 14),
-      );
-      if (key.year == currentOvulation.year &&
-          key.month == currentOvulation.month &&
-          key.day == currentOvulation.day) {
-        events.putIfAbsent(
-          key,
-          () => CalendarEventData(type: CalendarEventType.ovulation),
-        );
+      DateTime currentOvulation = lastPeriodOnly.add(Duration(days: _cycleLength - 14));
+      if (key.year == currentOvulation.year && key.month == currentOvulation.month && key.day == currentOvulation.day) {
+        events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
       }
 
       // --- PREDIKSI HAID (pink) ---
@@ -394,9 +376,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       bool found = false;
       while (!found && cycleNumber <= 100) {
         DateTime predictedStart = lastPeriodOnly.add(
-          Duration(
-            days: (cycleNumber * _cycleLength).round() + _predictionOffsetDays,
-          ),
+          Duration(days: (cycleNumber * _cycleLength).round() + _predictionOffsetDays)
         );
         if (predictedStart.isAfter(lastDayOfMonth) && cycleNumber > 1) break;
 
@@ -419,10 +399,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       int cycleNumberOv = 2;
       while (cycleNumberOv <= 100) {
         DateTime predictedStart = lastPeriodOnly.add(
-          Duration(
-            days:
-                (cycleNumberOv * _cycleLength).round() + _predictionOffsetDays,
-          ),
+          Duration(days: (cycleNumberOv * _cycleLength).round() + _predictionOffsetDays)
         );
         if (predictedStart.isAfter(lastDayOfMonth) && cycleNumberOv > 2) break;
         DateTime ovulation = predictedStart.subtract(const Duration(days: 14));
@@ -453,9 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final todayOnly = _dateOnly(DateTime.now());
     final tomorrow = todayOnly.add(const Duration(days: 1));
-    final baselinePredicted = _dateOnly(
-      _lastPeriodDate!,
-    ).add(Duration(days: _cycleLength));
+    final baselinePredicted = _dateOnly(_lastPeriodDate!).add(Duration(days: _cycleLength));
 
     setState(() {
       _predictionOffsetDays = tomorrow.difference(baselinePredicted).inDays;
@@ -476,13 +451,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
       );
       if (_predictedNextPeriod != null) {
-        final nextMonth = DateTime(
-          _predictedNextPeriod!.year,
-          _predictedNextPeriod!.month,
-          1,
-        );
-        if (_selectedDate.year != nextMonth.year ||
-            _selectedDate.month != nextMonth.month) {
+        final nextMonth = DateTime(_predictedNextPeriod!.year, _predictedNextPeriod!.month, 1);
+        if (_selectedDate.year != nextMonth.year || _selectedDate.month != nextMonth.month) {
           setState(() {
             _selectedDate = nextMonth;
           });
@@ -509,9 +479,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (newCycleLength > 45) newCycleLength = 45;
 
       final lastPeriodStr = actualDate.toIso8601String().split('T')[0];
-      final previousPeriodStr = _lastPeriodDate!.toIso8601String().split(
-        'T',
-      )[0];
+      final previousPeriodStr = _lastPeriodDate!.toIso8601String().split('T')[0];
 
       await _resetPredictionOffset();
 
@@ -527,10 +495,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       if (result['success'] && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Haid dikonfirmasi! Data siklus diperbarui.'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('Haid dikonfirmasi! Data siklus diperbarui.'), backgroundColor: Colors.green),
         );
         await _loadCycleData();
       } else {
@@ -539,10 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal update: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Gagal update: $e'), backgroundColor: Colors.red),
         );
       }
       if (mounted) setState(() => _isLoading = false);
@@ -555,7 +517,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   // "Belum" -> geser prediksi (lihat _shiftPredictionForward).
   Future<void> _showPredictionDialog(DateTime predictedDate) async {
     if (!mounted) return;
-
+    
     final action = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -625,13 +587,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _changeMonth(int delta) {
-    setState(
-      () => _selectedDate = DateTime(
-        _selectedDate.year,
-        _selectedDate.month + delta,
-        1,
-      ),
-    );
+    setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + delta, 1));
     _generateEventsForMonth();
     _loadNotesForMonth();
   }
@@ -666,7 +622,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   // ========== BOTTOM SHEET INFO TANGGAL ==========
   void _showDateInfoSheet(DateTime date) {
     if (!mounted) return;
-
+    
     final event = _calendarEvents[DateTime(date.year, date.month, date.day)];
     bool hasNote = _hasNoteDates[date] == true;
     String formattedDate = DateFormat('EEEE, dd MMMM yyyy', 'id').format(date);
@@ -787,9 +743,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   Navigator.pop(context);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => DailyNoteScreen(initialDate: date),
-                    ),
+                    MaterialPageRoute(builder: (_) => DailyNoteScreen(initialDate: date)),
                   ).then((_) => _loadNotesForMonth());
                 },
                 icon: const Icon(Icons.edit_note),
@@ -875,9 +829,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     value: (_summaryData['isOverdue'] == true)
                         ? '${_summaryData['overdueDays']}'
                         : '${_summaryData['daysUntilNext']}',
-                    unit: (_summaryData['isOverdue'] == true)
-                        ? 'hari terlambat'
-                        : 'hari lagi',
+                    unit: (_summaryData['isOverdue'] == true) ? 'hari terlambat' : 'hari lagi',
                   ),
                 ),
               ],
@@ -895,46 +847,26 @@ class _DashboardScreenState extends State<DashboardScreen>
                 children: [
                   Text(
                     'Hari ke-${_summaryData['currentDay']}',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.pink,
-                    ),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.pink),
                   ),
-                  const Text(
-                    'siklus',
-                    style: TextStyle(fontSize: 16, color: Colors.pink),
-                  ),
+                  const Text('siklus', style: TextStyle(fontSize: 16, color: Colors.pink)),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30)),
               child: Column(
                 children: [
-                  const Text(
-                    'Prediksi Haid Berikutnya:',
-                    style: TextStyle(fontSize: 16),
-                  ),
+                  const Text('Prediksi Haid Berikutnya:', style: TextStyle(fontSize: 16)),
                   Text(
                     _summaryData['nextPeriod'],
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.pink,
-                    ),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.pink),
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.pink.withAlpha(26),
                       borderRadius: BorderRadius.circular(20),
@@ -972,10 +904,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                       Text(
                         _dateFormat.format(_selectedDate),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       IconButton(
                         icon: const Icon(Icons.chevron_right),
@@ -1034,9 +963,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   backgroundColor: Colors.pink,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                 ),
               ),
             ),
@@ -1053,22 +980,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey)),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Colors.pink,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.pink)),
           Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
         ],
       ),
@@ -1107,8 +1024,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildCalendarDay(DateTime date) {
-    final isToday =
-        date.year == DateTime.now().year &&
+    final isToday = date.year == DateTime.now().year &&
         date.month == DateTime.now().month &&
         date.day == DateTime.now().day;
     final event = _calendarEvents[DateTime(date.year, date.month, date.day)];
@@ -1166,10 +1082,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               child: Icon(
                 Icons.edit_note,
                 size: 10,
-                color:
-                    bgColor == Colors.red ||
-                        bgColor == Colors.purple ||
-                        bgColor == Colors.green
+                color: bgColor == Colors.red || bgColor == Colors.purple || bgColor == Colors.green
                     ? Colors.white
                     : Colors.pink,
               ),

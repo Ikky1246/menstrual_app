@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/gemini_service.dart';
+import '../services/auth_service.dart'; // <-- TAMBAHKAN
 import '../models/chat_message.dart';
 
 class MiraiChatScreen extends StatefulWidget {
@@ -30,14 +31,23 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
   List<ChatMessage> _messages = [];
   bool _isLoading = false;
   bool _isTyping = false;
-
-  static const String _chatHistoryKey = 'mirai_chat_history';
+  
+  // Hapus konstanta statis, gunakan dynamic key
 
   @override
   void initState() {
     super.initState();
     _loadChatHistory();
     _addWelcomeMessage();
+  }
+
+  // ==============================================
+  // KEY UNIK PER USER
+  // ==============================================
+  Future<String> _getChatHistoryKey() async {
+    final user = await AuthService.getCurrentUser();
+    final userId = user?.idUser ?? 'guest';
+    return 'mirai_chat_history_$userId';
   }
 
   void _addWelcomeMessage() {
@@ -57,7 +67,8 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
 
   Future<void> _loadChatHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? historyJson = prefs.getString(_chatHistoryKey);
+    final key = await _getChatHistoryKey();
+    final String? historyJson = prefs.getString(key);
     if (historyJson != null) {
       try {
         final List<dynamic> decoded = jsonDecode(historyJson);
@@ -75,10 +86,10 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
 
   Future<void> _saveChatHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    final List<Map<String, dynamic>> messagesJson = _messages
-        .map((msg) => msg.toJson())
-        .toList();
-    await prefs.setString(_chatHistoryKey, jsonEncode(messagesJson));
+    final key = await _getChatHistoryKey();
+    final List<Map<String, dynamic>> messagesJson = 
+        _messages.map((msg) => msg.toJson()).toList();
+    await prefs.setString(key, jsonEncode(messagesJson));
   }
 
   void _scrollToBottom() {
@@ -112,6 +123,7 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
     _scrollToBottom();
 
     try {
+      // Siapkan history untuk Gemini
       List<Map<String, String>> history = [];
       final startIndex = _messages.length > 11 ? _messages.length - 11 : 0;
       for (int i = startIndex; i < _messages.length - 1; i++) {
@@ -121,12 +133,9 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
           'content': msg.text,
         });
       }
-
-      final response = await _geminiService.sendMessageWithHistory(
-        text,
-        history,
-      );
-
+      
+      final response = await _geminiService.sendMessageWithHistory(text, history);
+      
       final botMessage = ChatMessage(
         text: response,
         isUser: false,
@@ -178,12 +187,15 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
+              // Hapus riwayat untuk user ini
+              final prefs = await SharedPreferences.getInstance();
+              final key = await _getChatHistoryKey();
+              await prefs.remove(key);
               setState(() {
                 _messages.clear();
                 _addWelcomeMessage();
               });
-              _saveChatHistory();
               Navigator.pop(context);
             },
             child: const Text('Hapus', style: TextStyle(color: Colors.red)),
@@ -197,6 +209,7 @@ class _MiraiChatScreenState extends State<MiraiChatScreen> {
     return DateFormat('HH:mm').format(time);
   }
 
+  // ==================== BUILD UI (SAMA SEPERTI SEBELUMNYA) ====================
   @override
   Widget build(BuildContext context) {
     return Scaffold(

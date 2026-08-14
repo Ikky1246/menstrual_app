@@ -1,6 +1,8 @@
 // lib/screens/onboarding/optional_form_screen.dart
-// REDESAIN TEMA SAKURA — logika (prediksi AI, validasi usia, toggle, dsb) tidak diubah
-// FIX: Auto-refresh token jika session expired
+// VERSION FINAL - DENGAN PREDIKSI AI & INPUT WAJIB USIA, PCOS, KB
+// REVISI: fix RenderFlex overflow pada heading "Data Tambahan (Wajib untuk
+// prediksi akurat)" — Text fontSize 20 dibungkus Expanded supaya tidak
+// mendorong keluar batas Row di layar sempit.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -458,8 +460,55 @@ class _OptionalFormScreenState extends State<OptionalFormScreen> {
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 28),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Summary Chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildChip(Icons.favorite, 'Nyeri: ${widget.painLevel}/10', const Color(0xFFf4dce4), const Color(0xFF716066)),
+                _buildChip(Icons.bolt, 'Stres: $_stressLevel/10', const Color(0xFFffd9de), const Color(0xFF900038)),
+                _buildChip(Icons.nightlight_round, 'Tidur: ${_sleepHours.toStringAsFixed(1)} jam', const Color(0xFFe2e9ec), const Color(0xFF161d1f)),
+                _buildChip(Icons.sentiment_satisfied, 'Mood: ${_getMoodLabel(_moodLevel)}', const Color(0xFFe2e9ec), const Color(0xFF161d1f)),
+              ],
+            ),
+            const SizedBox(height: 48),
+
+            // Data Tambahan (Wajib untuk prediksi akurat)
+            // FIX: Text dibungkus Expanded supaya tidak overflow di layar sempit
+            // (sebelumnya RenderFlex overflowed by 71 pixels on the right).
+            Row(
+              children: [
+                const Icon(Icons.edit_note, color: Color(0xFFb80049), size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Data Tambahan (Wajib untuk prediksi akurat)',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF161d1f),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Isi data berikut agar AI dapat memberikan prediksi yang akurat',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF5b3f43),
+              ),
+            ),
+            const SizedBox(height: 24),
 
                       // Data Tambahan (Wajib untuk prediksi akurat)
                       Row(

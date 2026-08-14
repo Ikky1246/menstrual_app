@@ -61,6 +61,10 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     super.dispose();
   }
 
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
+
   String _getPainLabel(double value) {
     if (value <= 2) return 'Tidak sakit';
     if (value <= 4) return 'Sedikit sakit';
@@ -172,7 +176,6 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
       if (result['success'] == true) {
         final cycleData = result['data'];
-
         _savedCycleMongoId =
             cycleData['id']?.toString() ??
             cycleData['id_cycle']?.toString() ??
@@ -182,6 +185,11 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         if (_savedCycleMongoId != null) {
           await prefs.setString('latest_cycle_id', _savedCycleMongoId!);
         }
+        // ⬇️ TAMBAHKAN baris ini:
+        await prefs.setBool(
+          'has_cycle_data',
+          true,
+        ); // <-- flag mandatory selesai
 
         if (mounted) {
           setState(() => _isLoading = false);
@@ -290,8 +298,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    // Slider width dihitung dgn cara yg sama persis seperti kode asli (70% lebar layar)
-    final sliderWidth = screenWidth * 0.7;
+    final sliderWidth = screenWidth * 0.7; // 70% dari lebar layar untuk slider
 
     return Scaffold(
       body: Stack(
@@ -311,24 +318,205 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
             ),
           ),
 
-          // Blob dekoratif lembut (meniru radial-gradient di body::before)
-          const _RadialBlush(top: 40, left: -40, size: 200),
-          const _RadialBlush(top: 200, right: -50, size: 220),
-          const _RadialBlush(bottom: 140, left: -30, size: 180),
+              // Data Tanggal Section
+              Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_month,
+                    color: Color(0xFFb80049),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'DATA TANGGAL',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: Color(0xFF5b3f43),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
 
-          Column(
-            children: [
-              // ===== Header ala TopAppBar glass =====
-              _GlassHeader(onBack: () => Navigator.pop(context)),
+              // Tanggal Haid Terakhir
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Text(
+                      'Tanggal Haid Terakhir *',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFf4dce4)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: TextFormField(
+                      controller: _lastPeriodController,
+                      readOnly: true,
+                      onTap: () =>
+                          _selectDate(context, _lastPeriodController, (date) {
+                            _lastPeriodDate = date;
+                          }),
+                      decoration: InputDecoration(
+                        hintText: 'Pilih tanggal',
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        suffixIcon: const Icon(
+                          Icons.event,
+                          color: Color(0xFFb80049),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty)
+                          return 'Tanggal haid terakhir wajib diisi';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
 
-              // ===== Body scrollable =====
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              // Tanggal Haid Sebelumnya
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Text(
+                      'Tanggal Haid Sebelumnya',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFf4dce4)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: TextFormField(
+                      controller: _previousPeriodController,
+                      readOnly: true,
+                      onTap: () => _selectDate(
+                        context,
+                        _previousPeriodController,
+                        (date) {
+                          _previousPeriodDate = date;
+                        },
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Pilih tanggal (Opsional)',
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        suffixIcon: const Icon(
+                          Icons.calendar_today,
+                          color: Color(0xFF5b3f43),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, top: 4),
+                    child: Text(
+                      'Kosongkan jika tidak tahu (akan menggunakan default 28 hari).',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF5b3f43),
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
+
+              // Kondisi Tubuh Section
+              Row(
+                children: [
+                  const Icon(
+                    Icons.monitor_heart,
+                    color: Color(0xFFb80049),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'KONDISI TUBUH',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: Color(0xFF5b3f43),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Pain Level Card (overflow fixed)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFe91663).withValues(alpha: 0.04),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                  border: Border.all(color: const Color(0xFFf4dce4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Tingkat Nyeri',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFf4dce4),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _getPainLabel(_painLevel),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFFb80049),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Column(
                       children: [
                         // Welcome / Data Wajib Header (glass card)
                         _GlassCard(
@@ -366,20 +554,34 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                   size: 26,
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Data Wajib',
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: SakuraColors.primary,
+                              Positioned(
+                                left: (sliderWidth * _getPainPercentage()) - 12,
+                                top: 0,
+                                child: GestureDetector(
+                                  onHorizontalDragUpdate: (details) {
+                                    final newValue =
+                                        (details.localPosition.dx / sliderWidth)
+                                            .clamp(0.0, 1.0);
+                                    setState(() {
+                                      _painLevel = newValue * 10;
+                                    });
+                                  },
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFb80049),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 4,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          blurRadius: 4,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -399,28 +601,56 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 24),
-
-                        // Data Tanggal Section
-                        const _SectionHeader(
-                          icon: Icons.calendar_today,
-                          label: 'DATA TANGGAL',
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text(
+                              'Tidak sakit',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                            Text(
+                              'Sangat sakit',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 14),
 
-                        // Tanggal Haid Terakhir
-                        _GlassDateField(
-                          label: 'Tanggal Haid Terakhir *',
-                          controller: _lastPeriodController,
-                          hint: 'Pilih tanggal',
-                          icon: Icons.calendar_month,
-                          iconColor: SakuraColors.primary,
-                          onTap: () => _selectDate(
-                            context,
-                            _lastPeriodController,
-                            (date) {
-                              _lastPeriodDate = date;
-                            },
+              // Stress Level Card (overflow fixed)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFe91663).withValues(alpha: 0.04),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                  border: Border.all(color: const Color(0xFFf4dce4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Tingkat Stres',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
+                            ),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -429,77 +659,140 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                             return null;
                           },
                         ),
-                        const SizedBox(height: 14),
-
-                        // Tanggal Haid Sebelumnya
-                        _GlassDateField(
-                          label: 'Tanggal Haid Sebelumnya',
-                          controller: _previousPeriodController,
-                          hint: 'Pilih tanggal (Opsional)',
-                          icon: Icons.calendar_today,
-                          iconColor: SakuraColors.primary.withOpacity(0.7),
-                          onTap: () => _selectDate(
-                            context,
-                            _previousPeriodController,
-                            (date) {
-                              _previousPeriodDate = date;
-                            },
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFffd9e4),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                         ),
                         Padding(
                           padding: const EdgeInsets.only(left: 4, top: 6),
                           child: Text(
-                            'Kosongkan jika tidak tahu (akan menggunakan default 28 hari).',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontStyle: FontStyle.italic,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
+                            _getStressLabel(_stressLevel),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF890f50),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 26),
-
-                        // Kondisi Tubuh Section
-                        const _SectionHeader(
-                          icon: Icons.monitor_heart,
-                          label: 'KONDISI TUBUH',
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Column(
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          child: Stack(
+                            children: [
+                              Container(
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFf4dce4),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              Container(
+                                width: sliderWidth * _getStressPercentage(),
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFc5447f),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              Positioned(
+                                left:
+                                    (sliderWidth * _getStressPercentage()) - 12,
+                                top: 0,
+                                child: GestureDetector(
+                                  onHorizontalDragUpdate: (details) {
+                                    final newValue =
+                                        (details.localPosition.dx / sliderWidth)
+                                            .clamp(0.0, 1.0);
+                                    setState(() {
+                                      _stressLevel = newValue * 10;
+                                    });
+                                  },
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFc5447f),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 4,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          blurRadius: 4,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text(
+                              'Rileks',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                            Text(
+                              'Sangat stres',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 14),
 
-                        // Pain Level Card
-                        _SliderCard(
-                          title: 'Tingkat Nyeri',
-                          badgeText: _getPainLabel(_painLevel),
-                          accentColor: SakuraColors.primary,
-                          percentage: _getPainPercentage(),
-                          sliderWidth: sliderWidth,
-                          minLabel: 'Tidak sakit',
-                          maxLabel: 'Sangat sakit',
-                          onDragUpdate: (dx) {
-                            final newValue = (dx / sliderWidth).clamp(0.0, 1.0);
-                            setState(() {
-                              _painLevel = newValue * 10;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Stress Level Card
-                        _SliderCard(
-                          title: 'Tingkat Stres',
-                          badgeText: _getStressLabel(_stressLevel),
-                          accentColor: const Color(0xFFC5447F),
-                          percentage: _getStressPercentage(),
-                          sliderWidth: sliderWidth,
-                          minLabel: 'Rileks',
-                          maxLabel: 'Sangat stres',
-                          onDragUpdate: (dx) {
-                            final newValue = (dx / sliderWidth).clamp(0.0, 1.0);
-                            setState(() {
-                              _stressLevel = newValue * 10;
-                            });
-                          },
+              // Sleep Card (overflow fixed)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFe91663).withValues(alpha: 0.04),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                  border: Border.all(color: const Color(0xFFf4dce4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Rata-rata Tidur',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 14),
 
@@ -523,24 +816,38 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
 
                         // Promotional Banner
                         Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                SakuraColors.primary,
-                                SakuraColors.light,
-                              ],
+                            color: const Color(0xFFe2e9ec),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${_sleepHours.toStringAsFixed(1)} jam',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF161d1f),
                             ),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: SakuraColors.primary.withOpacity(0.25),
-                                blurRadius: 24,
-                                offset: const Offset(0, 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Column(
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          child: Stack(
+                            children: [
+                              Container(
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFf4dce4),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
                               ),
                             ],
                           ),
@@ -560,15 +867,38 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                                     ),
                                   ),
                                 ),
-                                Positioned(
-                                  top: -40,
-                                  left: -40,
+                              ),
+                              Positioned(
+                                left:
+                                    (sliderWidth * _getSleepPercentage()) - 12,
+                                top: 0,
+                                child: GestureDetector(
+                                  onHorizontalDragUpdate: (details) {
+                                    final newValue =
+                                        (details.localPosition.dx / sliderWidth)
+                                            .clamp(0.0, 1.0);
+                                    setState(() {
+                                      _sleepHours = 4 + (newValue * 6);
+                                    });
+                                  },
                                   child: Container(
                                     width: 100,
                                     height: 100,
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.15),
+                                      color: const Color(0xFF716066),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 4,
+                                      ),
                                       shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          blurRadius: 4,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -603,7 +933,26 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 100),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text(
+                              'Kurang',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                            Text(
+                              'Sangat cukup',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5b3f43),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -927,29 +1276,25 @@ class _SliderCard extends StatelessWidget {
                     color: accentColor,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 26,
-            // GestureDetector dibuat selebar SizedBox penuh (bukan cuma di
-            // thumb) supaya drag mudah dimulai dari mana saja di trek —
-            // logika perhitungan posisi (dx/sliderWidth) tetap identik
-            // dengan kode asli.
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragUpdate: (details) {
-                onDragUpdate(details.localPosition.dx);
-              },
-              child: Stack(
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 9),
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(4),
+                child: Stack(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'Pahami Sinyal Tubuhmu',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Setiap siklus memberikan petunjuk unik tentang kesehatan hormonalmu.',
+                          style: TextStyle(fontSize: 14, color: Colors.white70),
+                        ),
+                      ],
                     ),
                   ),
                   Container(
@@ -1046,21 +1391,23 @@ class _GradientButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onPressed,
-            child: Center(
-              child: isLoading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.5,
-                      ),
-                    )
+        child: SafeArea(
+          child: SizedBox(
+            width: double.infinity,
+            height: 64,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _saveAndContinue,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFb80049),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 15,
+                shadowColor: const Color(0xFFb80049).withValues(alpha: 0.3),
+              ),
+              child: _isLoading
+                  ? const CircularProgressIndicator(color: Colors.white)
                   : const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1068,8 +1415,7 @@ class _GradientButton extends StatelessWidget {
                           'Simpan & Lanjutkan',
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         SizedBox(width: 8),
@@ -1080,49 +1426,6 @@ class _GradientButton extends StatelessWidget {
                         ),
                       ],
                     ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Bercak radial dekoratif untuk background, meniru radial-gradient blush
-/// pada body::before di HTML.
-class _RadialBlush extends StatelessWidget {
-  final double? top;
-  final double? bottom;
-  final double? left;
-  final double? right;
-  final double size;
-
-  const _RadialBlush({
-    this.top,
-    this.bottom,
-    this.left,
-    this.right,
-    required this.size,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: top,
-      bottom: bottom,
-      left: left,
-      right: right,
-      child: IgnorePointer(
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                SakuraColors.primary.withOpacity(0.10),
-                SakuraColors.primary.withOpacity(0.0),
-              ],
             ),
           ),
         ),
