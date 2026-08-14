@@ -1,4 +1,6 @@
 // lib/screens/daily_note_screen.dart
+// REDESIGNED UI - Mengikuti desain MIRAI Catatan Harian dari HTML
+// Logika tetap sama, hanya tampilan yang diubah
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +21,12 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   int _moodLevel = 5;
   bool _isLoading = false;
   bool _isSaving = false;
+
+  final Color primary = const Color(0xFFEC1E63);
+  final Color primaryLight = const Color(0xFFFFD3E0);
+  final Color surface = const Color(0xFFFFF8F7);
+  final Color onSurface = const Color(0xFF281719);
+  final Color onSurfaceVariant = const Color(0xFF5C3F43);
 
   final List<Map<String, dynamic>> _symptoms = [
     {'name': 'Kram perut', 'selected': false},
@@ -167,203 +175,506 @@ class _DailyNoteScreenState extends State<DailyNoteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8E8F0),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.pink,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Catatan Harian',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: _selectDate,
+      backgroundColor: surface,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              primaryLight.withOpacity(0.6),
+              surface.withOpacity(0.3),
+              primaryLight.withOpacity(0.4),
+            ],
           ),
-        ],
-      ),
+        ),
+        child: Stack(
+          children: [
+            // Sakura Petals Background Decorations
+            ..._buildSakuraDecorations(),
 
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.pink))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Date Header
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
+            // Main Content
+            Column(
+              children: [
+                // ===== GLASS TOP APP BAR =====
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    border: Border(
+                      bottom: BorderSide(color: Colors.white.withOpacity(0.5)),
                     ),
-                    child: Text(
-                      DateFormat(
-                        'EEEE, dd MMMM yyyy',
-                        'id',
-                      ).format(_selectedDate),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 4,
                       ),
-                    ),
+                    ],
                   ),
-
-                  const SizedBox(height: 24),
-
-                  // Mood Section
-                  const Text(
-                    '😊 Bagaimana perasaanmu hari ini?',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      children: [
-                        Slider(
-                          value: _moodLevel.toDouble(),
-                          min: 1,
-                          max: 10,
-                          divisions: 9,
-                          activeColor: Colors.pink,
-                          inactiveColor: Colors.pink.shade100,
-                          onChanged: (value) =>
-                              setState(() => _moodLevel = value.toInt()),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text(
-                              'Sangat buruk',
-                              style: TextStyle(fontSize: 13),
-                            ),
-                            Text('Luar biasa', style: TextStyle(fontSize: 13)),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _getMoodLabel(_moodLevel),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.pink,
+                  child: Row(
+                    children: [
+                      // Back Button
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.arrow_back_ios_new,
+                            color: primary,
+                            size: 22,
                           ),
                         ),
-                        Text(
-                          _getMoodEmoji(_moodLevel),
-                          style: const TextStyle(fontSize: 48),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Symptoms
-                  const Text(
-                    '🤕 Gejala yang dirasakan',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: _symptoms.map((symptom) {
-                        final isSelected = symptom['selected'] as bool;
-                        return FilterChip(
-                          label: Text(symptom['name']),
-                          selected: isSelected,
-                          onSelected: (selected) =>
-                              setState(() => symptom['selected'] = selected),
-                          backgroundColor: Colors.grey.shade100,
-                          selectedColor: Colors.pink.shade50,
-                          checkmarkColor: Colors.pink,
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.pink : Colors.black87,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Notes
-                  const Text(
-                    '📝 Catatan tambahan',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: TextField(
-                      controller: _notesController,
-                      maxLines: 6,
-                      decoration: const InputDecoration(
-                        hintText: 'Tulis catatanmu di sini...',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(color: Colors.grey),
                       ),
-                    ),
+                      const Spacer(),
+                      // Title
+                      Text(
+                        'Catatan Harian',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: primary,
+                          fontFamily: 'PlusJakartaSans',
+                        ),
+                      ),
+                      const Spacer(),
+                      // Calendar Button
+                      GestureDetector(
+                        onTap: _selectDate,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.calendar_month,
+                            color: primary,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                ),
 
-                  const SizedBox(height: 32),
+                // ===== BODY CONTENT =====
+                Expanded(
+                  child: _isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFEC1E63),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Date Selector
+                              _buildGlassCard(
+                                child: Center(
+                                  child: Text(
+                                    DateFormat(
+                                      'EEEE, dd MMMM yyyy',
+                                      'id',
+                                    ).format(_selectedDate),
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                      color: onSurface,
+                                      fontFamily: 'PlusJakartaSans',
+                                    ),
+                                  ),
+                                ),
+                              ),
 
-                  // Save Button
-                  SizedBox(
+                              const SizedBox(height: 24),
+
+                              // Mood Section
+                              Row(
+                                children: [
+                                  const Text(
+                                    '😊',
+                                    style: TextStyle(fontSize: 22),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Bagaimana perasaanmu hari ini?',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: onSurface,
+                                      fontFamily: 'PlusJakartaSans',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              _buildGlassCard(
+                                child: Column(
+                                  children: [
+                                    // Slider
+                                    Slider(
+                                      value: _moodLevel.toDouble(),
+                                      min: 1,
+                                      max: 10,
+                                      divisions: 9,
+                                      activeColor: primary,
+                                      inactiveColor: primaryLight,
+                                      thumbColor: Colors.white,
+                                      overlayColor: WidgetStateProperty.all(
+                                        primary.withOpacity(0.2),
+                                      ),
+                                      onChanged: (value) => setState(
+                                        () => _moodLevel = value.toInt(),
+                                      ),
+                                    ),
+
+                                    // Labels
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Sangat buruk',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: onSurfaceVariant,
+                                              fontFamily: 'PlusJakartaSans',
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          Text(
+                                            'Luar biasa',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: onSurfaceVariant,
+                                              fontFamily: 'PlusJakartaSans',
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    const SizedBox(height: 20),
+
+                                    // Mood Display
+                                    Column(
+                                      children: [
+                                        Text(
+                                          _getMoodLabel(_moodLevel),
+                                          style: TextStyle(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w700,
+                                            color: primary,
+                                            fontFamily: 'PlusJakartaSans',
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _getMoodEmoji(_moodLevel),
+                                          style: const TextStyle(fontSize: 48),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 24),
+
+                              // Symptoms Section
+                              Row(
+                                children: [
+                                  const Text(
+                                    '🤕',
+                                    style: TextStyle(fontSize: 22),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Gejala yang dirasakan',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: onSurface,
+                                      fontFamily: 'PlusJakartaSans',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              _buildGlassCard(
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: _symptoms.map((symptom) {
+                                    final isSelected =
+                                        symptom['selected'] as bool;
+                                    return GestureDetector(
+                                      onTap: () => setState(() {
+                                        symptom['selected'] = !isSelected;
+                                      }),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 18,
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? primary
+                                              : Colors.white.withOpacity(0.7),
+                                          borderRadius: BorderRadius.circular(
+                                            50,
+                                          ),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? primary
+                                                : primary.withOpacity(0.2),
+                                            width: 1.5,
+                                          ),
+                                          boxShadow: isSelected
+                                              ? [
+                                                  BoxShadow(
+                                                    color: primary.withOpacity(
+                                                      0.3,
+                                                    ),
+                                                    blurRadius: 12,
+                                                    offset: const Offset(0, 4),
+                                                  ),
+                                                ]
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          symptom['name'],
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.w400,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : onSurface,
+                                            fontFamily: 'PlusJakartaSans',
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+
+                              const SizedBox(height: 24),
+
+                              // Notes Section
+                              Row(
+                                children: [
+                                  const Text(
+                                    '📝',
+                                    style: TextStyle(fontSize: 22),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Catatan tambahan',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: onSurface,
+                                      fontFamily: 'PlusJakartaSans',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              _buildGlassCard(
+                                child: TextField(
+                                  controller: _notesController,
+                                  maxLines: 6,
+                                  decoration: InputDecoration(
+                                    hintText: 'Tulis catatanmu di sini...',
+                                    hintStyle: TextStyle(
+                                      color: onSurfaceVariant.withOpacity(0.7),
+                                      fontFamily: 'PlusJakartaSans',
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: onSurface,
+                                    fontFamily: 'PlusJakartaSans',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            ),
+
+            // ===== FIXED BOTTOM SAVE BUTTON =====
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.white.withOpacity(0.9),
+                      Colors.white.withOpacity(0.7),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.6, 1.0],
+                  ),
+                ),
+                child: SafeArea(
+                  child: SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
                       onPressed: _isSaving ? null : _saveNote,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.pink,
+                        backgroundColor: primary,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+                          borderRadius: BorderRadius.circular(50),
                         ),
+                        elevation: 8,
+                        shadowColor: primary.withOpacity(0.3),
                       ),
                       child: _isSaving
-                          ? const CircularProgressIndicator(color: Colors.white)
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
                           : const Text(
                               'SIMPAN CATATAN',
                               style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 2,
+                                fontFamily: 'PlusJakartaSans',
                               ),
                             ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
+          ],
+        ),
+      ),
     );
+  }
+
+  // ===== GLASS CARD HELPER =====
+  Widget _buildGlassCard({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.8)),
+        boxShadow: [
+          BoxShadow(
+            color: primary.withOpacity(0.06),
+            blurRadius: 32,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  // ===== SAKURA DECORATIONS =====
+  List<Widget> _buildSakuraDecorations() {
+    return [
+      // Petal 1
+      Positioned(
+        top: 100,
+        left: -20,
+        child: Transform.rotate(
+          angle: 0.8,
+          child: Icon(
+            Icons.favorite,
+            color: primaryLight.withOpacity(0.3),
+            size: 120,
+          ),
+        ),
+      ),
+      // Petal 2
+      Positioned(
+        bottom: 200,
+        right: -30,
+        child: Transform.rotate(
+          angle: -0.5,
+          child: Icon(
+            Icons.favorite,
+            color: primaryLight.withOpacity(0.25),
+            size: 100,
+          ),
+        ),
+      ),
+      // Petal 3 - small
+      Positioned(
+        top: 300,
+        right: 20,
+        child: Transform.rotate(
+          angle: 0.3,
+          child: Icon(
+            Icons.favorite,
+            color: primaryLight.withOpacity(0.2),
+            size: 60,
+          ),
+        ),
+      ),
+      // Blur Circle 1
+      Positioned(
+        top: 80,
+        left: -40,
+        child: Container(
+          width: 150,
+          height: 150,
+          decoration: BoxDecoration(
+            color: primaryLight.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(150),
+          ),
+        ),
+      ),
+      // Blur Circle 2
+      Positioned(
+        bottom: 150,
+        right: -40,
+        child: Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            color: primaryLight.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(120),
+          ),
+        ),
+      ),
+    ];
   }
 }
