@@ -1,5 +1,4 @@
 // lib/screens/onboarding/mandatory_form_screen.dart
-// REDESAIN TEMA SAKURA/GLASSMORPHISM — logika tidak diubah dari versi sebelumnya
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -11,10 +10,6 @@ import 'package:menstrual_app/services/cycle_service.dart';
 import 'package:menstrual_app/screens/dashboard_screen.dart';
 import 'package:menstrual_app/utils/constants.dart';
 
-// SakuraColors sudah didefinisikan di login_screen.dart, dipakai ulang di sini
-// supaya tidak terjadi duplikasi class saat file-file ini di-import bersamaan.
-import 'package:menstrual_app/screens/auth/login_screen.dart';
-
 class MandatoryFormScreen extends StatefulWidget {
   const MandatoryFormScreen({super.key});
 
@@ -25,45 +20,41 @@ class MandatoryFormScreen extends StatefulWidget {
 class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // ============================================
-  // FIELD WAJIB (Sesuai Model - TANPA CYCLE LENGTH!)
-  // ============================================
   final _lastPeriodController = TextEditingController();
   final _previousPeriodController = TextEditingController();
 
-  // FIELD YANG DIPERLUKAN MODEL
-  double _painLevel = 5; // WAJIB (0-10)
-  double _stressLevel = 4; // WAJIB (0-10)
-  double _sleepHours = 7; // WAJIB (0-24)
-  double _moodLevel = 7; // OPSIONAL (1-10)
+  double _painLevel = 5;
+  double _stressLevel = 4;
+  double _sleepHours = 7;
+  final double _moodLevel = 7;
 
-  // Field tambahan (disimpan untuk info)
-  final _periodDurationController = TextEditingController();
+  // ✅ Hapus controller durasi haid
 
   DateTime? _lastPeriodDate;
   DateTime? _previousPeriodDate;
   bool _isLoading = false;
-
   String? _savedCycleMongoId;
 
-  // ===== LOGIKA TIDAK DIUBAH SAMA SEKALI =====
+  // Untuk scoping key per user
+  String? _userId;
+
   @override
   void initState() {
     super.initState();
-    _periodDurationController.text = '5';
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final user = await AuthService.getCurrentUser();
+    _userId = user?.idUser?.toString();
   }
 
   @override
   void dispose() {
     _lastPeriodController.dispose();
     _previousPeriodController.dispose();
-    _periodDurationController.dispose();
     super.dispose();
   }
-
-  // ============================================
-  // HELPER FUNCTIONS
-  // ============================================
 
   String _getPainLabel(double value) {
     if (value <= 2) return 'Tidak sakit';
@@ -81,101 +72,178 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
     return 'Sangat stres';
   }
 
-  // Hitung persentase slider untuk visualisasi progress bar
-  double _getPainPercentage() {
-    return _painLevel / 10;
-  }
-
-  double _getStressPercentage() {
-    return _stressLevel / 10;
-  }
-
-  double _getSleepPercentage() {
-    return (_sleepHours - 4) / 6; // min 4, max 10
-  }
+  double _getPainPercentage() => _painLevel / 10;
+  double _getStressPercentage() => _stressLevel / 10;
+  double _getSleepPercentage() => (_sleepHours - 4) / 6;
 
   Future<void> _selectDate(
     BuildContext context,
     TextEditingController controller,
     Function(DateTime) onDateSelected,
   ) async {
-    final DateTime? picked = await showDatePicker(
+    await showDialog(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.primary,
-              onPrimary: Colors.white,
-              onSurface: Colors.grey.shade800,
-            ),
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _CustomPinkCalendarPicker(
+            initialDate: DateTime.now(),
+            onDateSelected: (picked) {
+              final displayDate = DateFormat(
+                AppConstants.dateFormatDisplay,
+                'id',
+              ).format(picked);
+
+              controller.text = displayDate;
+              onDateSelected(picked);
+              Navigator.pop(dialogContext);
+            },
           ),
-          child: child!,
         );
       },
     );
+  }
 
-    if (picked != null) {
-      String displayDate = DateFormat(
-        AppConstants.dateFormatDisplay,
-        'id',
-      ).format(picked);
-      controller.text = displayDate;
-      onDateSelected(picked);
-      setState(() {});
+  int _calculateCycleLengthDays() {
+    if (_previousPeriodDate != null && _lastPeriodDate != null) {
+      final diff = _lastPeriodDate!.difference(_previousPeriodDate!).inDays;
+      if (diff > 0) {
+        if (diff < 21) return 21;
+        if (diff > 45) return 45;
+        return diff;
+      }
     }
+    return 28;
   }
 
   Future<void> _saveAndContinue() async {
-    // Validasi form
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    debugPrint('🟢 Tombol Simpan & Lanjutkan ditekan!');
 
-    // Validasi tanggal harus diisi
-    if (_lastPeriodDate == null) {
+    if (_formKey.currentState == null) {
+      debugPrint('❌ Form state null, mungkin form belum siap');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Tanggal haid terakhir wajib diisi'),
-            backgroundColor: AppColors.error,
+            content: Text('Form belum siap, silakan coba lagi.'),
+            backgroundColor: Colors.orange,
           ),
         );
       }
       return;
     }
 
+    if (!_formKey.currentState!.validate()) {
+      debugPrint('❌ Validasi form gagal');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mohon lengkapi semua field yang wajib diisi.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (_lastPeriodDate == null) {
+      debugPrint('❌ Tanggal haid terakhir belum dipilih');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tanggal haid terakhir wajib diisi'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (_previousPeriodDate != null &&
+        !_previousPeriodDate!.isBefore(_lastPeriodDate!)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Tanggal haid sebelumnya harus lebih awal dari tanggal haid terakhir',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Validasi jarak 21-45 hari
+    if (_previousPeriodDate != null && _lastPeriodDate != null) {
+      final diff = _lastPeriodDate!.difference(_previousPeriodDate!).inDays;
+      if (diff > 45) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Jarak antara tanggal haid terakhir dan sebelumnya tidak boleh lebih dari 45 hari. Silakan periksa kembali tanggal yang dipilih.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      if (diff < 21) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Jarak antara tanggal haid terakhir dan sebelumnya terlalu pendek (minimal 21 hari). Silakan periksa kembali tanggal yang dipilih.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
+      debugPrint('📤 Menyimpan data siklus...');
       final user = await AuthService.getCurrentUser();
 
       if (user == null || user.idUser == null) {
         throw Exception('User tidak ditemukan. Silakan login kembali.');
       }
 
-      String lastPeriodFormatted = DateFormat(
+      // Ambil userId untuk scoping
+      final userId = user.idUser.toString();
+      _userId = userId;
+
+      final lastPeriodFormatted = DateFormat(
         AppConstants.dateFormatApi,
       ).format(_lastPeriodDate!);
-      String? previousPeriodFormatted = _previousPeriodDate != null
+      final previousPeriodFormatted = _previousPeriodDate != null
           ? DateFormat(AppConstants.dateFormatApi).format(_previousPeriodDate!)
           : null;
 
       final result = await CycleService.saveCycle(
         lastPeriodDate: lastPeriodFormatted,
         previousPeriodDate: previousPeriodFormatted,
-        cycleLengthDays: 28, // Nilai default sementara
+        cycleLengthDays: _calculateCycleLengthDays(),
         painLevel: _painLevel.toInt(),
         stressScoreCycle: _stressLevel.toInt(),
         sleepHoursCycle: _sleepHours,
         moodScore: _moodLevel.toInt(),
       );
 
+      debugPrint('📊 Hasil saveCycle: $result');
+
       if (result['success'] == true) {
         final cycleData = result['data'];
+        if (cycleData == null) {
+          throw Exception('Data cycle tidak valid dari server (data kosong).');
+        }
         _savedCycleMongoId =
             cycleData['id']?.toString() ??
             cycleData['id_cycle']?.toString() ??
@@ -185,11 +253,16 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         if (_savedCycleMongoId != null) {
           await prefs.setString('latest_cycle_id', _savedCycleMongoId!);
         }
-        // ⬇️ TAMBAHKAN baris ini:
-        await prefs.setBool(
-          'has_cycle_data',
-          true,
-        ); // <-- flag mandatory selesai
+        await prefs.setBool('has_cycle_data', true);
+
+        // ✅ SIMPAN: kondisi tubuh terbaru dengan key per-user
+        // (agar data tidak tercampur antar akun)
+        await prefs.setInt('${userId}_last_pain_level', _painLevel.toInt());
+        await prefs.setInt('${userId}_last_stress_level', _stressLevel.toInt());
+        await prefs.setDouble('${userId}_last_sleep_hours', _sleepHours);
+        await prefs.setInt('${userId}_last_mood_level', _moodLevel.toInt());
+
+        // ✅ Hapus penyimpanan durasi haid (hardcode 7 hari di dashboard)
 
         if (mounted) {
           setState(() => _isLoading = false);
@@ -199,13 +272,16 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
         throw Exception(result['message'] ?? 'Gagal menyimpan data');
       }
     } catch (e) {
-      setState(() => _isLoading = false);
-
+      debugPrint('❌ Error: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal menyimpan data: $e'),
-            backgroundColor: AppColors.error,
+            content: Text(
+              'Gagal menyimpan data: ${e.toString().replaceFirst('Exception: ', '')}',
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -236,10 +312,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                 );
               }
             },
-            child: Text(
-              'Lewati',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
+            child: Text('Lewati', style: TextStyle(color: Colors.grey[600])),
           ),
           ElevatedButton(
             onPressed: () {
@@ -249,6 +322,8 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                 if (mounted &&
                     _savedCycleMongoId != null &&
                     _lastPeriodDate != null) {
+                  // ✅ Durasi haid hardcode 7 hari
+                  const int periodDuration = 7;
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -256,9 +331,8 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                         cycleId: _savedCycleMongoId!,
                         lastPeriodDate: _lastPeriodDate!,
                         previousPeriodDate: _previousPeriodDate,
-                        cycleLengthDays: 28,
-                        periodDurationDays:
-                            int.tryParse(_periodDurationController.text) ?? 5,
+                        cycleLengthDays: _calculateCycleLengthDays(),
+                        periodDurationDays: periodDuration,
                         painLevel: _painLevel.toInt(),
                         stressLevel: _stressLevel.toInt(),
                         sleepHours: _sleepHours,
@@ -277,7 +351,7 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
               });
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: const Color(0xFFFF69B4),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -289,124 +363,135 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
       ),
     );
   }
-  // ===== AKHIR LOGIKA =====
-
-  // ============================================
-  // BUILD UI - REDESAIN TEMA SAKURA/GLASSMORPHISM
-  // ============================================
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final sliderWidth = screenWidth * 0.7; // 70% dari lebar layar untuk slider
+    final sliderWidth = screenWidth * 0.7;
+    final primaryPink = const Color(0xFFFF69B4);
+    final lightPink = const Color(0xFFFFF0F6);
 
     return Scaffold(
       body: Stack(
         children: [
-          // Background gradient sakura
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  SakuraColors.light,
-                  Color(0xFFFFF8F7),
-                  SakuraColors.light,
-                ],
+                colors: [lightPink, const Color(0xFFFFF8F7), lightPink],
               ),
             ),
           ),
+          _SakuraPetal(top: 40, left: 20, size: 48, opacity: 0.6),
+          _SakuraPetal(top: 130, right: 40, size: 64, opacity: 0.4),
+          _SakuraPetal(bottom: 160, left: 80, size: 32, opacity: 0.5),
+          _SakuraPetal(bottom: 80, right: 64, size: 56, opacity: 0.3),
 
-              // Data Tanggal Section
-              Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_month,
-                    color: Color(0xFFb80049),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'DATA TANGGAL',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                      color: Color(0xFF5b3f43),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+          const Positioned(top: 0, left: 0, right: 0, child: _GlassHeader()),
 
-              // Tanggal Haid Terakhir
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4),
-                    child: Text(
-                      'Tanggal Haid Terakhir *',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43)),
+          Positioned(
+            top: 90,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
+              physics: const BouncingScrollPhysics(),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _GlassCard(
+                      padding: const EdgeInsets.all(20),
+                      borderRadius: 24,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF69B4), Color(0xFFFFB6D9)],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: primaryPink.withValues(alpha: 0.25),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.favorite,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Data Wajib',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFFFF69B4),
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Isi data berikut untuk mulai memantau siklus kesehatanmu.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFf4dce4)),
-                      borderRadius: BorderRadius.circular(12),
+                    const SizedBox(height: 28),
+
+                    const _SectionHeader(
+                      icon: Icons.calendar_month,
+                      label: 'DATA TANGGAL',
                     ),
-                    child: TextFormField(
+                    const SizedBox(height: 16),
+
+                    _GlassDateField(
+                      label: 'Tanggal Haid Terakhir *',
                       controller: _lastPeriodController,
-                      readOnly: true,
+                      hint: 'Pilih tanggal',
+                      icon: Icons.event,
+                      iconColor: primaryPink,
                       onTap: () =>
                           _selectDate(context, _lastPeriodController, (date) {
                             _lastPeriodDate = date;
                           }),
-                      decoration: InputDecoration(
-                        hintText: 'Pilih tanggal',
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        suffixIcon: const Icon(
-                          Icons.event,
-                          color: Color(0xFFb80049),
-                        ),
-                      ),
                       validator: (value) {
                         if (value == null || value.isEmpty)
                           return 'Tanggal haid terakhir wajib diisi';
                         return null;
                       },
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-              // Tanggal Haid Sebelumnya
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4),
-                    child: Text(
-                      'Tanggal Haid Sebelumnya',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF5b3f43)),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFf4dce4)),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: TextFormField(
+                    _GlassDateField(
+                      label: 'Tanggal Haid 2 Bulan Sebelumnya',
                       controller: _previousPeriodController,
-                      readOnly: true,
+                      hint: 'Pilih tanggal (Opsional)',
+                      icon: Icons.calendar_today,
+                      iconColor: Colors.grey,
                       onTap: () => _selectDate(
                         context,
                         _previousPeriodController,
@@ -414,554 +499,142 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                           _previousPeriodDate = date;
                         },
                       ),
-                      decoration: InputDecoration(
-                        hintText: 'Pilih tanggal (Opsional)',
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        suffixIcon: const Icon(
-                          Icons.calendar_today,
-                          color: Color(0xFF5b3f43),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8, top: 4),
+                      child: Text(
+                        'Kosongkan jika tidak tahu (akan menggunakan default 28 hari).',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4, top: 4),
-                    child: Text(
-                      'Kosongkan jika tidak tahu (akan menggunakan default 28 hari).',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF5b3f43),
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-
-              // Kondisi Tubuh Section
-              Row(
-                children: [
-                  const Icon(
-                    Icons.monitor_heart,
-                    color: Color(0xFFb80049),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'KONDISI TUBUH',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                      color: Color(0xFF5b3f43),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Pain Level Card (overflow fixed)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFe91663).withValues(alpha: 0.04),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                  border: Border.all(color: const Color(0xFFf4dce4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Tingkat Nyeri',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF161d1f),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFf4dce4),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _getPainLabel(_painLevel),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFFb80049),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                     const SizedBox(height: 16),
-                    Column(
-                      children: [
-                        // Welcome / Data Wajib Header (glass card)
-                        _GlassCard(
-                          padding: const EdgeInsets.all(20),
-                          borderRadius: 24,
-                          child: Row(
+
+                    // ❌ HAPUS blok Durasi Haid (hardcode 7 hari)
+
+                    const SizedBox(height: 24),
+
+                    const _SectionHeader(
+                      icon: Icons.monitor_heart,
+                      label: 'KONDISI TUBUH',
+                    ),
+                    const SizedBox(height: 16),
+
+                    _SliderCard(
+                      title: 'Tingkat Nyeri',
+                      badgeText: _getPainLabel(_painLevel),
+                      accentColor: const Color(0xFFb80049),
+                      percentage: _getPainPercentage(),
+                      sliderWidth: sliderWidth,
+                      minLabel: 'Tidak sakit',
+                      maxLabel: 'Sangat sakit',
+                      onDragUpdate: (dx) {
+                        final newValue = (dx / sliderWidth).clamp(0.0, 1.0);
+                        setState(() => _painLevel = newValue * 10);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    _SliderCard(
+                      title: 'Tingkat Stres',
+                      badgeText: _getStressLabel(_stressLevel),
+                      accentColor: const Color(0xFFc5447f),
+                      percentage: _getStressPercentage(),
+                      sliderWidth: sliderWidth,
+                      minLabel: 'Rileks',
+                      maxLabel: 'Sangat stres',
+                      onDragUpdate: (dx) {
+                        final newValue = (dx / sliderWidth).clamp(0.0, 1.0);
+                        setState(() => _stressLevel = newValue * 10);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    _SliderCard(
+                      title: 'Rata-rata Tidur',
+                      badgeText: '${_sleepHours.toStringAsFixed(1)} jam',
+                      accentColor: const Color(0xFF716066),
+                      percentage: _getSleepPercentage(),
+                      sliderWidth: sliderWidth,
+                      minLabel: 'Kurang',
+                      maxLabel: 'Sangat cukup',
+                      onDragUpdate: (dx) {
+                        final newValue = (dx / sliderWidth).clamp(0.0, 1.0);
+                        setState(() => _sleepHours = 4 + (newValue * 6));
+                      },
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Promotional Banner - RESPONSIVE
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(screenWidth < 360 ? 16 : 24),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFFF69B4), Color(0xFFD81B60)],
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primaryPink.withValues(alpha: 0.25),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                width: 56,
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      SakuraColors.primary,
-                                      SakuraColors.light,
-                                    ],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: SakuraColors.primary.withOpacity(
-                                        0.25,
-                                      ),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.favorite,
+                              Text(
+                                'Pahami Sinyal Tubuhmu',
+                                style: TextStyle(
+                                  fontSize: screenWidth < 360 ? 16 : 20,
+                                  fontWeight: FontWeight.bold,
                                   color: Colors.white,
-                                  size: 26,
                                 ),
                               ),
-                              Positioned(
-                                left: (sliderWidth * _getPainPercentage()) - 12,
-                                top: 0,
-                                child: GestureDetector(
-                                  onHorizontalDragUpdate: (details) {
-                                    final newValue =
-                                        (details.localPosition.dx / sliderWidth)
-                                            .clamp(0.0, 1.0);
-                                    setState(() {
-                                      _painLevel = newValue * 10;
-                                    });
-                                  },
-                                  child: Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFb80049),
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 4,
-                                      ),
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          blurRadius: 4,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Isi data berikut untuk mulai memantau siklus kesehatanmu.',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade800,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              SizedBox(height: screenWidth < 360 ? 4 : 8),
+                              Text(
+                                'Setiap siklus memberikan petunjuk unik tentang kesehatan hormonalmu.',
+                                style: TextStyle(
+                                  fontSize: screenWidth < 360 ? 12 : 14,
+                                  color: Colors.white70,
+                                  height: 1.4,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text(
-                              'Tidak sakit',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5b3f43),
+                          Positioned(
+                            bottom: screenWidth < 360 ? -8 : -16,
+                            right: screenWidth < 360 ? -12 : -24,
+                            child: SizedBox(
+                              width: screenWidth < 360 ? 80 : 120,
+                              height: screenWidth < 360 ? 80 : 120,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.white10,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                             ),
-                            Text(
-                              'Sangat sakit',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5b3f43),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-              // Stress Level Card (overflow fixed)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFe91663).withValues(alpha: 0.04),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                  border: Border.all(color: const Color(0xFFf4dce4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Tingkat Stres',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF161d1f),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Tanggal haid terakhir wajib diisi';
-                            }
-                            return null;
-                          },
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFffd9e4),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4, top: 6),
-                          child: Text(
-                            _getStressLabel(_stressLevel),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF890f50),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Column(
-                      children: [
-                        SizedBox(
-                          height: 24,
-                          child: Stack(
-                            children: [
-                              Container(
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFf4dce4),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              Container(
-                                width: sliderWidth * _getStressPercentage(),
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFc5447f),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              Positioned(
-                                left:
-                                    (sliderWidth * _getStressPercentage()) - 12,
-                                top: 0,
-                                child: GestureDetector(
-                                  onHorizontalDragUpdate: (details) {
-                                    final newValue =
-                                        (details.localPosition.dx / sliderWidth)
-                                            .clamp(0.0, 1.0);
-                                    setState(() {
-                                      _stressLevel = newValue * 10;
-                                    });
-                                  },
-                                  child: Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFc5447f),
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 4,
-                                      ),
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          blurRadius: 4,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text(
-                              'Rileks',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5b3f43),
-                              ),
-                            ),
-                            Text(
-                              'Sangat stres',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5b3f43),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-              // Sleep Card (overflow fixed)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFe91663).withValues(alpha: 0.04),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                  border: Border.all(color: const Color(0xFFf4dce4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Rata-rata Tidur',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF161d1f),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Sleep Card
-                        _SliderCard(
-                          title: 'Rata-rata Tidur',
-                          badgeText: '${_sleepHours.toStringAsFixed(1)} jam',
-                          accentColor: const Color(0xFF716066),
-                          percentage: _getSleepPercentage(),
-                          sliderWidth: sliderWidth,
-                          minLabel: 'Kurang',
-                          maxLabel: 'Sangat cukup',
-                          onDragUpdate: (dx) {
-                            final newValue = (dx / sliderWidth).clamp(0.0, 1.0);
-                            setState(() {
-                              _sleepHours = 4 + (newValue * 6);
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Promotional Banner
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFe2e9ec),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${_sleepHours.toStringAsFixed(1)} jam',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF161d1f),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Column(
-                      children: [
-                        SizedBox(
-                          height: 24,
-                          child: Stack(
-                            children: [
-                              Container(
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFf4dce4),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  bottom: -30,
-                                  right: -30,
-                                  child: Container(
-                                    width: 130,
-                                    height: 130,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                left:
-                                    (sliderWidth * _getSleepPercentage()) - 12,
-                                top: 0,
-                                child: GestureDetector(
-                                  onHorizontalDragUpdate: (details) {
-                                    final newValue =
-                                        (details.localPosition.dx / sliderWidth)
-                                            .clamp(0.0, 1.0);
-                                    setState(() {
-                                      _sleepHours = 4 + (newValue * 6);
-                                    });
-                                  },
-                                  child: Container(
-                                    width: 100,
-                                    height: 100,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF716066),
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 4,
-                                      ),
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          blurRadius: 4,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: const [
-                                      Text(
-                                        'Pahami Sinyal Tubuhmu',
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      SizedBox(height: 10),
-                                      Text(
-                                        'Setiap siklus memberikan petunjuk unik tentang kesehatan hormonalmu.',
-                                        style: TextStyle(
-                                          fontSize: 14.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.white,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text(
-                              'Kurang',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5b3f43),
-                              ),
-                            ),
-                            Text(
-                              'Sangat cukup',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5b3f43),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ),
-            ],
+            ),
           ),
 
-          // ===== Tombol aksi bawah, fixed dgn fade putih =====
           Positioned(
             left: 0,
             right: 0,
@@ -973,8 +646,8 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.white.withOpacity(0.0),
-                    Colors.white.withOpacity(0.9),
+                    Colors.white.withValues(alpha: 0.0),
+                    Colors.white.withValues(alpha: 0.9),
                     Colors.white,
                   ],
                   stops: const [0.0, 0.4, 1.0],
@@ -995,15 +668,16 @@ class _MandatoryFormScreenState extends State<MandatoryFormScreen> {
   }
 }
 
-// ============ Widget-widget bantu tampilan ============
+// =====================================================================
+// WIDGET BANTU UI (tidak ada perubahan signifikan, hanya untuk kelengkapan)
+// =====================================================================
 
-/// Header ala TopAppBar dgn efek kaca (blur), meniru header sticky di HTML.
 class _GlassHeader extends StatelessWidget {
-  final VoidCallback onBack;
-  const _GlassHeader({required this.onBack});
+  const _GlassHeader();
 
   @override
   Widget build(BuildContext context) {
+    final primaryPink = const Color(0xFFFF69B4);
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
@@ -1015,13 +689,13 @@ class _GlassHeader extends StatelessWidget {
             right: 8,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
             border: Border(
-              bottom: BorderSide(color: Colors.white.withOpacity(0.6)),
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.6)),
             ),
             boxShadow: [
               BoxShadow(
-                color: SakuraColors.primary.withOpacity(0.05),
+                color: primaryPink.withValues(alpha: 0.05),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1029,14 +703,10 @@ class _GlassHeader extends StatelessWidget {
           ),
           child: Row(
             children: [
-              IconButton(
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back, color: SakuraColors.primary),
-              ),
               Expanded(
                 child: ShaderMask(
                   shaderCallback: (bounds) => const LinearGradient(
-                    colors: [SakuraColors.primary, Color(0xFFD81B60)],
+                    colors: [Color(0xFFFF69B4), Color(0xFFD81B60)],
                   ).createShader(bounds),
                   child: const Text(
                     'MIRAI',
@@ -1045,14 +715,10 @@ class _GlassHeader extends StatelessWidget {
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                       letterSpacing: -0.5,
-                      color: Colors.white, // ditimpa ShaderMask
+                      color: Colors.white,
                     ),
                   ),
                 ),
-              ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.more_vert, color: SakuraColors.primary),
               ),
             ],
           ),
@@ -1062,12 +728,10 @@ class _GlassHeader extends StatelessWidget {
   }
 }
 
-/// Kartu kaca (glassmorphism) untuk elemen umum: header info, input tanggal, dsb.
 class _GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double borderRadius;
-
   const _GlassCard({
     required this.child,
     required this.padding,
@@ -1076,12 +740,13 @@ class _GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primaryPink = const Color(0xFFFF69B4);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(borderRadius),
         boxShadow: [
           BoxShadow(
-            color: SakuraColors.primary.withOpacity(0.12),
+            color: primaryPink.withValues(alpha: 0.12),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -1094,9 +759,9 @@ class _GlassCard extends StatelessWidget {
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.78),
+              color: Colors.white.withValues(alpha: 0.78),
               borderRadius: BorderRadius.circular(borderRadius),
-              border: Border.all(color: Colors.white.withOpacity(0.9)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
             ),
             child: child,
           ),
@@ -1106,7 +771,6 @@ class _GlassCard extends StatelessWidget {
   }
 }
 
-/// Header seksi (mis. "DATA TANGGAL") dgn ikon, meniru .section-header di HTML.
 class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1116,7 +780,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: SakuraColors.primary, size: 20),
+        Icon(icon, color: const Color(0xFFFF69B4), size: 20),
         const SizedBox(width: 10),
         Text(
           label,
@@ -1124,7 +788,7 @@ class _SectionHeader extends StatelessWidget {
             fontSize: 13,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.1,
-            color: SakuraColors.primary,
+            color: Color(0xFFFF69B4),
           ),
         ),
       ],
@@ -1132,8 +796,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// Input tanggal bergaya kaca dgn label di atas, meniru elemen date picker
-/// pada desain baru. Aksi tap (`onTap`) tetap memanggil `_selectDate` yang asli.
 class _GlassDateField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
@@ -1155,6 +817,8 @@ class _GlassDateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lightPink = const Color(0xFFFFB6D9);
+    final primaryPink = const Color(0xFFFF69B4);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1166,18 +830,18 @@ class _GlassDateField extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.3,
-              color: Colors.grey.shade800,
+              color: Colors.grey[800],
             ),
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85),
+            color: Colors.white.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: SakuraColors.light.withOpacity(0.9)),
+            border: Border.all(color: lightPink.withValues(alpha: 0.9)),
             boxShadow: [
               BoxShadow(
-                color: SakuraColors.primary.withOpacity(0.06),
+                color: primaryPink.withValues(alpha: 0.06),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1195,7 +859,7 @@ class _GlassDateField extends StatelessWidget {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(
-                color: Colors.grey.shade400,
+                color: Colors.grey,
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
               ),
@@ -1214,9 +878,6 @@ class _GlassDateField extends StatelessWidget {
   }
 }
 
-/// Kartu slider kustom (drag manual). Kalkulasi posisi (percentage,
-/// sliderWidth, rumus drag `dx / sliderWidth` clamp 0..1) tetap PERSIS
-/// sama seperti kode asli — komponen ini murni presentasional.
 class _SliderCard extends StatelessWidget {
   final String title;
   final String badgeText;
@@ -1240,6 +901,7 @@ class _SliderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lightPink = const Color(0xFFFFB6D9);
     return _GlassCard(
       padding: const EdgeInsets.all(22),
       borderRadius: 24,
@@ -1264,9 +926,11 @@ class _SliderCard extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.1),
+                  color: accentColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: accentColor.withOpacity(0.25)),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Text(
                   badgeText,
@@ -1276,34 +940,41 @@ class _SliderCard extends StatelessWidget {
                     color: accentColor,
                   ),
                 ),
-                child: Stack(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'Pahami Sinyal Tubuhmu',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Setiap siklus memberikan petunjuk unik tentang kesehatan hormonalmu.',
-                          style: TextStyle(fontSize: 14, color: Colors.white70),
-                        ),
-                      ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragUpdate: (details) =>
+                onDragUpdate(details.localPosition.dx),
+            onTapDown: (details) => onDragUpdate(details.localPosition.dx),
+            child: SizedBox(
+              width: sliderWidth,
+              height: 26,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    top: 9,
+                    child: Container(
+                      width: sliderWidth,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: lightPink.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
                   ),
-                  Container(
-                    margin: const EdgeInsets.only(top: 9),
-                    width: (sliderWidth * percentage).clamp(0.0, sliderWidth),
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: accentColor,
-                      borderRadius: BorderRadius.circular(4),
+                  Positioned(
+                    top: 9,
+                    child: Container(
+                      width: (sliderWidth * percentage).clamp(0.0, sliderWidth),
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: accentColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
                   ),
                   Positioned(
@@ -1312,20 +983,22 @@ class _SliderCard extends StatelessWidget {
                       sliderWidth - 13,
                     ),
                     top: 0,
-                    child: Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: accentColor,
-                        border: Border.all(color: Colors.white, width: 3),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: accentColor.withOpacity(0.4),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: accentColor,
+                          border: Border.all(color: Colors.white, width: 3),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: accentColor.withValues(alpha: 0.4),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1343,7 +1016,7 @@ class _SliderCard extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
-                  color: Colors.grey.shade600,
+                  color: Colors.grey[600],
                 ),
               ),
               Text(
@@ -1352,7 +1025,7 @@ class _SliderCard extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
-                  color: Colors.grey.shade600,
+                  color: Colors.grey[600],
                 ),
               ),
             ],
@@ -1363,15 +1036,14 @@ class _SliderCard extends StatelessWidget {
   }
 }
 
-/// Tombol gradient "Simpan & Lanjutkan" meniru tombol CTA pada desain baru.
 class _GradientButton extends StatelessWidget {
   final bool isLoading;
   final VoidCallback? onPressed;
-
   const _GradientButton({required this.isLoading, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
+    final primaryPink = const Color(0xFFFF69B4);
     return SizedBox(
       width: double.infinity,
       height: 60,
@@ -1381,54 +1053,532 @@ class _GradientButton extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [SakuraColors.primary, Color(0xFFD81B60)],
+            colors: [Color(0xFFFF69B4), Color(0xFFD81B60)],
           ),
           boxShadow: [
             BoxShadow(
-              color: SakuraColors.primary.withOpacity(0.35),
+              color: primaryPink.withValues(alpha: 0.35),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
           ],
         ),
-        child: SafeArea(
-          child: SizedBox(
-            width: double.infinity,
-            height: 64,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _saveAndContinue,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFb80049),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 15,
-                shadowColor: const Color(0xFFb80049).withValues(alpha: 0.3),
-              ),
-              child: _isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Simpan & Lanjutkan',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Icon(
-                          Icons.arrow_forward,
-                          size: 20,
-                          color: Colors.white,
-                        ),
-                      ],
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onPressed,
+            child: Center(
+              child: isLoading
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
+                    )
+                  : const Text(
+                      'Simpan & Lanjutkan',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
                     ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SakuraPetal extends StatelessWidget {
+  final double? top, bottom, left, right, size, opacity;
+  const _SakuraPetal({
+    this.top,
+    this.bottom,
+    this.left,
+    this.right,
+    required this.size,
+    required this.opacity,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryPink = const Color(0xFFFF69B4);
+    return Positioned(
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
+      child: Opacity(
+        opacity: opacity!,
+        child: Transform.rotate(
+          angle: 0.785398,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: primaryPink.withValues(alpha: 0.15),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(15),
+                bottomRight: Radius.circular(15),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// WIDGET KALENDER PINK 3-LEVEL (tidak berubah, hanya copy dari kode asli)
+// =====================================================================
+
+enum _CalendarView { day, month, year }
+
+class _CustomPinkCalendarPicker extends StatefulWidget {
+  final DateTime? initialDate;
+  final Function(DateTime) onDateSelected;
+
+  const _CustomPinkCalendarPicker({
+    this.initialDate,
+    required this.onDateSelected,
+  });
+
+  @override
+  State<_CustomPinkCalendarPicker> createState() =>
+      _CustomPinkCalendarPickerState();
+}
+
+class _CustomPinkCalendarPickerState extends State<_CustomPinkCalendarPicker> {
+  _CalendarView _view = _CalendarView.day;
+  late int _displayYear;
+  late int _displayMonth;
+  late int _selectedDate;
+  late int _selectedMonth;
+  late int _selectedYear;
+  late int _decadeStart;
+
+  static const List<String> _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  static const List<String> _shortMonthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  static const List<String> _dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  static const Color _pinkPrimary = Color(0xFFFF69B4);
+  static const Color _pinkDark = Color(0xFFFF1493);
+  static const Color _pinkLight = Color(0xFFFFB6D9);
+  static const Color _pinkBg = Color(0xFFFFF0F6);
+  static const Color _pinkBg2 = Color(0xFFFFE0F0);
+
+  @override
+  void initState() {
+    super.initState();
+    final now = widget.initialDate ?? DateTime.now();
+    _displayYear = now.year;
+    _displayMonth = now.month;
+    _selectedDate = now.day;
+    _selectedMonth = now.month;
+    _selectedYear = now.year;
+    _decadeStart = (now.year ~/ 10) * 10 - 10;
+  }
+
+  String _getHeaderTitle() {
+    switch (_view) {
+      case _CalendarView.day:
+        return '${_monthNames[_displayMonth - 1]} $_displayYear';
+      case _CalendarView.month:
+        return '$_displayYear';
+      case _CalendarView.year:
+        return '$_decadeStart - ${_decadeStart + 9}';
+    }
+  }
+
+  void _goPrev() {
+    setState(() {
+      if (_view == _CalendarView.day) {
+        _displayMonth--;
+        if (_displayMonth < 1) {
+          _displayMonth = 12;
+          _displayYear--;
+        }
+      } else if (_view == _CalendarView.month) {
+        _displayYear--;
+      } else {
+        _decadeStart -= 10;
+      }
+    });
+  }
+
+  void _goNext() {
+    setState(() {
+      if (_view == _CalendarView.day) {
+        _displayMonth++;
+        if (_displayMonth > 12) {
+          _displayMonth = 1;
+          _displayYear++;
+        }
+      } else if (_view == _CalendarView.month) {
+        _displayYear++;
+      } else {
+        _decadeStart += 10;
+      }
+    });
+  }
+
+  void _goUpLevel() {
+    setState(() {
+      if (_view == _CalendarView.day) {
+        _view = _CalendarView.month;
+      } else if (_view == _CalendarView.month) {
+        _view = _CalendarView.year;
+      }
+    });
+  }
+
+  Widget _buildDayView() {
+    final firstDay = DateTime(_displayYear, _displayMonth, 1);
+    final daysInMonth = DateTime(_displayYear, _displayMonth + 1, 0).day;
+    final firstWeekday = firstDay.weekday % 7;
+    final prevMonthDays = DateTime(_displayYear, _displayMonth, 0).day;
+    final today = DateTime.now();
+
+    final List<Widget> cells = [];
+
+    for (int i = firstWeekday - 1; i >= 0; i--) {
+      cells.add(_buildDayCell((prevMonthDays - i).toString(), isOtherMonth: true));
+    }
+
+    for (int day = 1; day <= daysInMonth; day++) {
+      final isToday = (day == today.day && _displayMonth == today.month && _displayYear == today.year);
+      final isSelected = (day == _selectedDate && _displayMonth == _selectedMonth && _displayYear == _selectedYear);
+
+      cells.add(
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedDate = day;
+              _selectedMonth = _displayMonth;
+              _selectedYear = _displayYear;
+            });
+            widget.onDateSelected(DateTime(_displayYear, _displayMonth, day));
+          },
+          child: _buildDayCell(day.toString(), isToday: isToday, isSelected: isSelected),
+        ),
+      );
+    }
+
+    final totalCells = firstWeekday + daysInMonth;
+    final remaining = (7 - (totalCells % 7)) % 7;
+    for (int i = 1; i <= remaining; i++) {
+      cells.add(_buildDayCell(i.toString(), isOtherMonth: true));
+    }
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: _dayNames.map((d) => Expanded(
+            child: Text(
+              d,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _pinkPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          )).toList(),
+        ),
+        const SizedBox(height: 8),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 7,
+          childAspectRatio: 1.0,
+          mainAxisSpacing: 2,
+          crossAxisSpacing: 2,
+          children: cells,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDayCell(
+    String text, {
+    bool isToday = false,
+    bool isSelected = false,
+    bool isOtherMonth = false,
+  }) {
+    Color bgColor = Colors.transparent;
+    Color textColor = const Color(0xFF666666);
+    FontWeight fontWeight = FontWeight.normal;
+    final List<BoxShadow> shadows = [];
+
+    if (isOtherMonth) {
+      textColor = const Color(0xFFDDDDDD);
+    } else if (isToday) {
+      bgColor = _pinkPrimary;
+      textColor = Colors.white;
+      fontWeight = FontWeight.bold;
+      shadows.add(
+        BoxShadow(
+          color: _pinkPrimary.withValues(alpha: 0.4),
+          blurRadius: 8,
+          offset: const Offset(0, 4),
+        ),
+      );
+    } else if (isSelected) {
+      bgColor = _pinkLight;
+      textColor = Colors.white;
+    }
+
+    return Container(
+      margin: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: shadows,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: fontWeight,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthView() {
+    final today = DateTime.now();
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 4,
+      childAspectRatio: 1.5,
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      children: List.generate(12, (index) {
+        final isCurrentMonth = (index + 1 == today.month && _displayYear == today.year);
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _displayMonth = index + 1;
+              _view = _CalendarView.day;
+            });
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: isCurrentMonth
+                  ? const LinearGradient(
+                      colors: [_pinkPrimary, _pinkDark],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : const LinearGradient(
+                      colors: [_pinkBg, _pinkBg2],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isCurrentMonth ? _pinkDark : _pinkLight,
+                width: 2,
+              ),
+              boxShadow: isCurrentMonth
+                  ? [
+                      BoxShadow(
+                        color: _pinkPrimary.withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _shortMonthNames[index],
+              style: TextStyle(
+                color: isCurrentMonth ? Colors.white : const Color(0xFF666666),
+                fontWeight: isCurrentMonth ? FontWeight.bold : FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildYearView() {
+    final today = DateTime.now();
+    final start = _decadeStart - 2;
+    final end = _decadeStart + 11;
+
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 4,
+      childAspectRatio: 1.5,
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      children: List.generate(end - start + 1, (index) {
+        final year = start + index;
+        final isCurrentYear = (year == today.year);
+        final isInRange = (year >= _decadeStart && year <= _decadeStart + 9);
+
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _displayYear = year;
+              _view = _CalendarView.month;
+            });
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: isCurrentYear
+                  ? const LinearGradient(
+                      colors: [_pinkPrimary, _pinkDark],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : const LinearGradient(
+                      colors: [_pinkBg, _pinkBg2],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isCurrentYear ? _pinkDark : _pinkLight,
+                width: 2,
+              ),
+              boxShadow: isCurrentYear
+                  ? [
+                      BoxShadow(
+                        color: _pinkPrimary.withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              year.toString(),
+              style: TextStyle(
+                color: !isInRange
+                    ? const Color(0xFFBBBBBB)
+                    : (isCurrentYear ? Colors.white : const Color(0xFF666666)),
+                fontWeight: isCurrentYear ? FontWeight.bold : FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 380,
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _pinkLight, width: 3),
+        boxShadow: [
+          BoxShadow(
+            color: _pinkPrimary.withValues(alpha: 0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: _goUpLevel,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [_pinkBg, _pinkBg2],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _pinkLight, width: 2),
+                  ),
+                  child: Text(
+                    _getHeaderTitle(),
+                    style: const TextStyle(
+                      color: _pinkPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  _buildNavButton(Icons.keyboard_arrow_up_rounded, _goPrev),
+                  const SizedBox(width: 4),
+                  _buildNavButton(Icons.keyboard_arrow_down_rounded, _goNext),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: KeyedSubtree(
+              key: ValueKey(_view),
+              child: _view == _CalendarView.day
+                  ? _buildDayView()
+                  : _view == _CalendarView.month
+                  ? _buildMonthView()
+                  : _buildYearView(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavButton(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [_pinkBg, _pinkBg2],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _pinkLight, width: 2),
+        ),
+        child: Icon(icon, color: _pinkPrimary, size: 24),
       ),
     );
   }
