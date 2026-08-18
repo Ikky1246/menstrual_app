@@ -1,9 +1,14 @@
 // lib/screens/profile_screen.dart
 // REDESIGNED UI - Mengikuti desain MIRAI Profil dari HTML
 // Logika tetap sama, hanya tampilan yang diubah
+// FIX: Tombol "PERBARUI DATA TAMBAHAN" sekarang berfungsi mengarah ke OptionalFormScreen
+// ADD: Cek apakah data tambahan sudah lengkap atau belum
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../services/cycle_service.dart';
+import '../screens/onboarding/optional_form_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -22,6 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isDataLengkap = false; // Apakah data tambahan sudah lengkap?
 
   final Color primary = const Color(0xFFEC1E63);
   final Color primaryLight = const Color(0xFFFFD3E0);
@@ -47,6 +53,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _emailController.text = user.email?.trim() ?? '';
           _phoneController.text = user.noTelepon?.trim() ?? '';
           _ageController.text = user.age?.toString() ?? '';
+          // Cek apakah data tambahan sudah lengkap
+          _isDataLengkap = user.age != null && user.pcosDiagnosed != null && user.birthControlUse != null;
         });
       } else {
         final result = await AuthService.getProfile();
@@ -57,18 +65,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _emailController.text = u.email?.trim() ?? '';
             _phoneController.text = u.noTelepon?.trim() ?? '';
             _ageController.text = u.age?.toString() ?? '';
+            _isDataLengkap = u.age != null && u.pcosDiagnosed != null && u.birthControlUse != null;
           });
         }
       }
     } catch (e) {
-      print('Error load profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gagal memuat data profil')),
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -92,6 +100,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               backgroundColor: Colors.green,
             ),
           );
+          // Reload profil untuk update status data tambahan
+          _loadUserProfile();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -102,7 +112,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
-      print('Update profile error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -151,18 +160,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await AuthService.logout();
     } catch (e) {
-      print('Logout error: $e');
+      // ignore
     }
 
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  // ==================== NAVIGASI KE OPTIONAL FORM ====================
+  // ==================== NAVIGASI KE OPTIONAL FORM (DENGAN DATA SIKLUS TERBARU) ====================
   Future<void> _navigateToOptionalForm() async {
-    // Navigasi ke optional form dan tunggu hasilnya
-    final result = await Navigator.pushNamed(context, '/optional_form');
+    // Ambil siklus terakhir dari server
+    final cycleResult = await CycleService.getLatestCycle();
+    if (!mounted) return;
 
-    // Jika ada perubahan data, reload profile
+    if (!cycleResult['success'] || cycleResult['cycle'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Belum ada data siklus. Silakan isi data mandatory terlebih dahulu.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final cycle = cycleResult['cycle'];
+
+    // Ambil period duration dari SharedPreferences (default 7)
+    final prefs = await SharedPreferences.getInstance();
+    final periodDuration = prefs.getInt('period_duration') ?? 7;
+
+    // Jika data tambahan sudah lengkap, tampilkan konfirmasi "Perbarui" atau langsung arahkan
+    // Kita akan tetap arahkan ke OptionalFormScreen, karena user bisa mengubah data.
+
+    // Navigasi ke OptionalFormScreen dengan parameter yang valid
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OptionalFormScreen(
+          cycleId: cycle.id!,
+          lastPeriodDate: cycle.lastPeriodDate,
+          previousPeriodDate: cycle.previousPeriodDate,
+          cycleLengthDays: cycle.cycleLengthDays ?? 28,
+          periodDurationDays: periodDuration,
+          painLevel: cycle.painLevel ?? 5,
+          stressLevel: cycle.stressScoreCycle ?? 4,
+          sleepHours: cycle.sleepHoursCycle ?? 7,
+          moodLevel: cycle.moodScore ?? 7,
+        ),
+      ),
+    );
+
+    // Jika user kembali dari OptionalForm (misal menekan back), reload profil
     if (result == true) {
       _loadUserProfile();
     }
@@ -396,16 +443,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             color: primary.withOpacity(0.1),
                                           ),
                                         ),
-                                        child: Text(
-                                          'Lengkapi data tambahan Anda untuk mendapatkan prediksi siklus kesehatan yang lebih akurat dan personal.',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                            color: onSurface,
-                                            fontFamily: 'PlusJakartaSans',
-                                            height: 1.5,
-                                          ),
+                                        child: Column(
+                                          children: [
+                                            Text(
+                                              _isDataLengkap
+                                                  ? '✅ Data tambahan sudah lengkap'
+                                                  : '⚠️ Data tambahan belum lengkap',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w700,
+                                                color: _isDataLengkap
+                                                    ? Colors.green.shade700
+                                                    : Colors.orange.shade700,
+                                                fontFamily: 'PlusJakartaSans',
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              _isDataLengkap
+                                                  ? 'Klik tombol di bawah untuk memperbarui data tambahan Anda.'
+                                                  : 'Lengkapi data tambahan Anda untuk mendapatkan prediksi siklus kesehatan yang lebih akurat dan personal.',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                                color: onSurface,
+                                                fontFamily: 'PlusJakartaSans',
+                                                height: 1.4,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                       const SizedBox(height: 16),
@@ -426,8 +494,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               0.25,
                                             ),
                                           ),
-                                          child: const Text(
-                                            'PERBARUI DATA TAMBAHAN',
+                                          child: Text(
+                                            _isDataLengkap
+                                                ? 'PERBARUI DATA TAMBAHAN'
+                                                : 'LENGKAPI DATA TAMBAHAN',
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,

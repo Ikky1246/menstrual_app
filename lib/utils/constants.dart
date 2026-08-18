@@ -143,18 +143,8 @@ class AppTextStyle {
 }
 
 class AppConstants {
-  // ==============================================
-  // API CONFIGURATION - SESUAIKAN DENGAN IP ANDA!
-  // ==============================================
-  // 🔴 UNTUK EMULATOR ANDROID (AVD):
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  static const String baseUrl = 'https://mirai.nexidn.cloud';
   
-  // 🔴 UNTUK HP REAL (GANTI DENGAN IP KOMPUTER ANDA):
-  // static const String baseUrl = 'http://192.168.1.100:8000';
-  
-  // 🔴 UNTUK LOCALHOST (TESTING DI BROWSER/POSTMAN):
-  // static const String baseUrl = 'http://localhost:8000';
-
   // ==============================================
   // AUTH ENDPOINTS (Mobile API)
   // ==============================================

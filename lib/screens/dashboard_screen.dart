@@ -1,32 +1,18 @@
 // lib/screens/dashboard_screen.dart
 // Fitur lengkap: merah haid aktual, pink prediksi geser, konfirmasi Ya/Tidak responsif
-// Durasi haid default = 7 hari (bisa diubah lewat mandatory form)
+// Durasi haid HARDCODE = 7 hari (tidak bisa diubah)
 // Ovulasi menyesuaikan dengan prediksi terbaru
 // Panjang siklus yang ditampilkan = cycleLength (dari database/AI) tanpa offset
 // Offset hanya untuk menggeser tanggal prediksi, bukan mengubah panjang siklus
 //
 // REVISI:
+// - Semua SharedPreferences key di-scope per user (pakai prefix userId)
+// - Durasi haid = 7 hari (konstanta)
 // - Popup konfirmasi haid muncul maksimal 1x/hari, terus berulang tiap hari sampai user konfirmasi
 // - Konfirmasi "Ya" membuka date picker (bukan langsung pakai tanggal prediksi)
-// - "Belum" menggeser prediksi dengan logika catch-up: prediksi baru = besok (hari ini + 1),
-//   bukan sekadar prediksi lama + 1, sehingga otomatis mengejar ketertinggalan jika user
-//   baru login beberapa hari setelah tanggal prediksi seharusnya
-// - Offset TIDAK lagi direset setiap kali _loadCycleData() dipanggil (misal saat pindah tab),
-//   hanya direset ketika data siklus dari server benar-benar berubah (siklus baru dikonfirmasi)
-// - "Hari ini" (hijau) selalu menimpa warna lain di kalender, termasuk merah (haid aktual)
-// - Dialog koreksi terpisah (_checkCorrectionNeeded dkk) dihapus karena sudah digantikan
-//   sepenuhnya oleh mekanisme popup harian dengan catch-up di atas
-//
-// REVISI 2 (perbaikan popup):
-// - Flag "sudah tampil" pakai key baru (_v2); flag lama yang keburu tersimpan &
-//   mem-blokir popup diabaikan
-// - Popup juga terpicu saat app kembali dari background (WidgetsBindingObserver),
-//   termasuk kalau app terbuka lewat tengah malam / dibuka kembali di tanggal prediksi
-// - Guard _isDialogShowing mencegah dialog dobel
-// - Ovulasi di summary SELALU pakai _findRelevantOvulationDate() supaya tidak
-//   menampilkan tanggal masa lalu setelah geser "Belum" dan tetap sinkron dengan
-//   titik ungu di kalender
-// - Log debugPrint (🔔/🔕/✅) di jalur popup supaya mudah melacak kenapa popup skip
+// - "Belum" menggeser prediksi dengan logika catch-up: prediksi baru = besok (hari ini + 1)
+// - "Hari ini" (hijau) selalu menimpa warna lain di kalender
+// - Tombol konfirmasi/geser di bottom sheet hanya untuk tanggal <= hari ini
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -34,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'daily_note_screen.dart';
 import 'profile_screen.dart';
 import 'mirai_chat_screen.dart';
+import '../services/auth_service.dart';
 import '../services/cycle_service.dart';
 import '../services/daily_note_service.dart';
 
@@ -60,7 +47,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   };
 
   bool _isLoading = true;
-  int _periodDuration = 7;
+  // DURASI HAID HARDCODE = 7 hari
+  static const int _periodDuration = 7;
   DateTime? _lastPeriodDate;
   DateTime? _previousPeriodDate;
   int _cycleLength = 28;
@@ -71,16 +59,23 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   int _predictionOffsetDays = 0;
   bool _isDialogShowing = false;
 
-  static const String _kPredictionOffsetKey = 'prediction_offset';
-  // v2: key baru supaya flag lama yang keburu tersimpan (dan mem-blokir popup) diabaikan
-  static const String _kLastPopupShownKey = 'last_popup_shown_date_v2';
+  // User ID (int dari API)
+  int? _userId;
+  String get _userIdPrefix => _userId?.toString() ?? 'unknown';
+
+  // Key names dengan prefix
+  String get _kPredictionOffsetKey => '${_userIdPrefix}_prediction_offset';
+  String get _kLastPopupShownKey => '${_userIdPrefix}_last_popup_shown_date_v2';
+  String get _kLastPainKey => '${_userIdPrefix}_last_pain_level';
+  String get _kLastStressKey => '${_userIdPrefix}_last_stress_level';
+  String get _kLastSleepKey => '${_userIdPrefix}_last_sleep_hours';
+  String get _kLastMoodKey => '${_userIdPrefix}_last_mood_level';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadPredictionOffset();
-    _loadInitialData();
+    _loadUserIdAndData();
   }
 
   @override
@@ -92,14 +87,23 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // User kembali ke app (atau lewat tengah malam saat app terbuka) → cek ulang popup
       _checkAndShowDailyPopup();
     }
   }
 
   // ========== INISIALISASI ==========
-  Future<void> _loadInitialData() async {
-    await _loadPeriodDuration();
+  Future<void> _loadUserIdAndData() async {
+    final user = await AuthService.getCurrentUser();
+    if (user?.idUser != null) {
+      _userId = user!.idUser;
+    } else {
+      final refreshed = await AuthService.refreshToken();
+      if (refreshed) {
+        final newUser = await AuthService.getCurrentUser();
+        _userId = newUser?.idUser;
+      }
+    }
+    await _loadPredictionOffset();
     await _loadCycleData();
   }
 
@@ -112,13 +116,15 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     return x.year == y.year && x.month == y.month && x.day == y.day;
   }
 
-  // ========== OFFSET ==========
+  // ========== OFFSET (per user) ==========
   Future<void> _loadPredictionOffset() async {
+    if (_userId == null) return;
     final prefs = await SharedPreferences.getInstance();
     _predictionOffsetDays = prefs.getInt(_kPredictionOffsetKey) ?? 0;
   }
 
   Future<void> _savePredictionOffset() async {
+    if (_userId == null) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kPredictionOffsetKey, _predictionOffsetDays);
   }
@@ -130,27 +136,26 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     }
   }
 
-  // ========== DURASI HAID ==========
-  Future<void> _loadPeriodDuration() async {
-    final prefs = await SharedPreferences.getInstance();
-    final duration = prefs.getInt('period_duration');
-    setState(() {
-      _periodDuration = duration ?? 7;
-    });
-  }
-
   // ========== LOAD DATA SIKLUS ==========
   Future<void> _loadCycleData() async {
+    if (_userId == null) {
+      final refreshed = await AuthService.refreshToken();
+      if (refreshed) {
+        final user = await AuthService.getCurrentUser();
+        _userId = user?.idUser;
+      }
+      if (_userId == null) {
+        if (mounted) _showNoDataDialog();
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
     try {
       final cycleResult = await CycleService.getLatestCycle();
       if (cycleResult['success'] && cycleResult['cycle'] != null) {
         final cycle = cycleResult['cycle'];
 
-        // Siklus baru terdeteksi hanya kalau lastPeriodDate dari server berubah
-        // dibanding yang sedang kita pegang. Ini penting: _loadCycleData() bisa
-        // terpanggil berkali-kali (mis. pindah tab), jadi offset yang sudah
-        // disimpan user TIDAK BOLEH ikut ter-reset di panggilan-panggilan itu.
         final bool isNewCycle =
             _lastPeriodDate == null || !_isSameDate(_lastPeriodDate!, cycle.lastPeriodDate);
 
@@ -164,13 +169,11 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           await _loadPredictionOffset();
         }
 
-        // Hitung ulang semua prediksi
         _updatePredictions();
         _calculateSummary();
         _generateEventsForMonth();
         _loadNotesForMonth();
 
-        // Popup konfirmasi haid: maksimal 1x per hari, berulang tiap hari sampai dikonfirmasi
         await _checkAndShowDailyPopup();
       } else {
         if (mounted) _showNoDataDialog();
@@ -183,14 +186,13 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     }
   }
 
-  // ========== POPUP HARIAN ==========
+  // ========== POPUP HARIAN (per user) ==========
   Future<void> _checkAndShowDailyPopup() async {
-    if (_predictedNextPeriod == null || !mounted || _isDialogShowing) return;
+    if (_predictedNextPeriod == null || !mounted || _isDialogShowing || _userId == null) return;
 
     final todayOnly = _dateOnly(DateTime.now());
     final predOnly = _dateOnly(_predictedNextPeriod!);
 
-    // Belum waktunya (prediksi masih di masa depan)
     if (todayOnly.isBefore(predOnly)) {
       debugPrint('🔕 Popup skip: hari ini $todayOnly, prediksi $predOnly (belum masuk)');
       return;
@@ -200,14 +202,13 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     final todayKey = DateFormat('yyyy-MM-dd').format(todayOnly);
     final lastShown = prefs.getString(_kLastPopupShownKey);
     debugPrint('🔔 Cek popup harian: today=$todayKey, lastShown=$lastShown');
-    if (lastShown == todayKey) return; // sudah tampil hari ini
-
-    await prefs.setString(_kLastPopupShownKey, todayKey);
+    if (lastShown == todayKey) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _isDialogShowing) return;
       _isDialogShowing = true;
       try {
+        await prefs.setString(_kLastPopupShownKey, todayKey);
         debugPrint('✅ Menampilkan popup konfirmasi haid');
         await _showPredictionDialog(predOnly);
       } finally {
@@ -225,11 +226,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     _ovulationDate = _predictedNextPeriod!.subtract(const Duration(days: 14));
   }
 
-  // Cari ovulasi berikutnya yang masih relevan (>= hari ini), dengan formula
-  // yang SAMA persis dengan yang dipakai _generateEventsForMonth() untuk
-  // menandai titik ungu di kalender. Ini memastikan teks "Ovulasi" di atas
-  // kalender selalu match dengan apa yang benar-benar tampil di kalender,
-  // baik sebelum maupun sesudah tanggal prediksi (setelah digeser sekalipun).
   DateTime? _findRelevantOvulationDate() {
     if (_lastPeriodDate == null) return null;
     final base = _dateOnly(_lastPeriodDate!);
@@ -247,7 +243,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   void _calculateSummary() {
     final today = _dateOnly(DateTime.now());
 
-    // rawDiff negatif berarti sudah lewat tanggal prediksi (overdue/terlambat)
     int rawDiff = _predictedNextPeriod != null
         ? _dateOnly(_predictedNextPeriod!).difference(today).inDays
         : 0;
@@ -261,20 +256,10 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         : 1;
     if (currentDay < 1) currentDay = 1;
 
-    // Ovulasi yang ditampilkan SELALU ovulasi berikutnya yang masih relevan
-    // (>= hari ini) → sinkron dengan titik ungu di kalender, dan tidak pernah
-    // menampilkan tanggal masa lalu (termasuk setelah geser "Belum").
     final DateTime? displayedOvulation = _findRelevantOvulationDate();
 
     setState(() {
       _summaryData = {
-        // Panjang siklus efektif: cycleLength dasar + offset yang sudah
-        // digeser lewat popup "Belum Haid". Selama belum pernah digeser
-        // (offset 0) nilainya sama dengan cycleLength dari server seperti
-        // biasa; begitu user beberapa kali menjawab "Belum", angka ini ikut
-        // naik supaya mencerminkan siklus yang sedang berjalan lebih panjang
-        // dari rata-rata sebelumnya. Begitu haid dikonfirmasi, nilai ini
-        // digantikan oleh cycleLength baru dari server (offset direset ke 0).
         'avgCycleLength': _cycleLength + _predictionOffsetDays,
         'daysUntilNext': daysUntilNext,
         'isOverdue': isOverdue,
@@ -288,9 +273,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     });
   }
 
-  // Prediksi haid ditampilkan sebagai RENTANG tanggal (sesuai _periodDuration),
-  // bukan cuma tanggal mulai — supaya selalu match dengan rentang pink yang
-  // benar-benar tampil di kalender.
   String _formatPredictionRange() {
     if (_predictedNextPeriod == null) return '-';
     final start = _dateOnly(_predictedNextPeriod!);
@@ -330,7 +312,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       final date = DateTime(year, month, day);
       final key = DateTime(date.year, date.month, date.day);
 
-      // --- HAID SEBELUMNYA (merah) ---
+      // HAID SEBELUMNYA (merah)
       if (previousPeriodOnly != null && key.isAfter(previousPeriodOnly.subtract(const Duration(days: 1)))) {
         int daysSincePrev = key.difference(previousPeriodOnly).inDays;
         if (daysSincePrev >= 0 && daysSincePrev < _periodDuration) {
@@ -339,7 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         }
       }
 
-      // --- HAID SAAT INI (merah) ---
+      // HAID SAAT INI (merah)
       if (key.isAfter(lastPeriodOnly.subtract(const Duration(days: 1)))) {
         int daysSinceLast = key.difference(lastPeriodOnly).inDays;
         if (daysSinceLast >= 0 && daysSinceLast < _periodDuration) {
@@ -348,7 +330,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         }
       }
 
-      // --- OVULASI SIKLUS SEBELUMNYA (ungu) ---
+      // OVULASI SIKLUS SEBELUMNYA (ungu)
       if (previousPeriodOnly != null) {
         DateTime prevOvulation = previousPeriodOnly.add(
           Duration(days: _cycleLength - 14),
@@ -363,13 +345,13 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         }
       }
 
-      // --- OVULASI SIKLUS SAAT INI (ungu) ---
+      // OVULASI SIKLUS SAAT INI (ungu)
       DateTime currentOvulation = lastPeriodOnly.add(Duration(days: _cycleLength - 14));
       if (key.year == currentOvulation.year && key.month == currentOvulation.month && key.day == currentOvulation.day) {
         events.putIfAbsent(key, () => CalendarEventData(type: CalendarEventType.ovulation));
       }
 
-      // --- PREDIKSI HAID (pink) ---
+      // PREDIKSI HAID (pink)
       if (key.isBefore(lastPeriodOnly)) continue;
 
       int cycleNumber = 1;
@@ -395,7 +377,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       }
       if (found) continue;
 
-      // --- OVULASI PREDIKSI (ungu) untuk siklus berikutnya ---
+      // OVULASI PREDIKSI (ungu) untuk siklus berikutnya
       int cycleNumberOv = 2;
       while (cycleNumberOv <= 100) {
         DateTime predictedStart = lastPeriodOnly.add(
@@ -421,10 +403,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   }
 
   // ========== GESER PREDIKSI (Belum Haid) ==========
-  // Prediksi baru selalu = besok (hari ini + 1), dihitung dari baseline
-  // (lastPeriodDate + cycleLength, TANPA offset lama). Ini otomatis
-  // "mengejar" kalau user baru login beberapa hari setelah tanggal
-  // prediksi yang seharusnya, bukan cuma +1 dari prediksi lama.
   Future<void> _shiftPredictionForward() async {
     if (_lastPeriodDate == null) return;
 
@@ -464,12 +442,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   }
 
   // ========== KONFIRMASI HAID (Ya) ==========
-  // Siklus baru dimulai pada tanggal yang dipilih user:
-  // - last_period_date = tanggal mulai haid yang dipilih
-  // - previous_period_date = haid lama
-  // - panjang siklus = selisih aktual (clamp 21–45)
-  // Kalender langsung menampilkan merah 7 hari (_periodDuration) mulai tanggal
-  // itu, dan ovulasi dihitung ulang dari siklus baru via _loadCycleData().
   Future<void> _confirmPeriodStart(DateTime actualDate) async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -481,19 +453,25 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       final lastPeriodStr = actualDate.toIso8601String().split('T')[0];
       final previousPeriodStr = _lastPeriodDate!.toIso8601String().split('T')[0];
 
-      await _resetPredictionOffset();
+      // Ambil cache kondisi tubuh dengan prefix userId
+      final prefs = await SharedPreferences.getInstance();
+      final lastPain = prefs.getInt(_kLastPainKey) ?? 5;
+      final lastStress = prefs.getInt(_kLastStressKey) ?? 4;
+      final lastSleep = prefs.getDouble(_kLastSleepKey) ?? 7.0;
+      final lastMood = prefs.getInt(_kLastMoodKey) ?? 7;
 
       final result = await CycleService.saveCycle(
         lastPeriodDate: lastPeriodStr,
         previousPeriodDate: previousPeriodStr,
         cycleLengthDays: newCycleLength,
-        painLevel: 5,
-        stressScoreCycle: 4,
-        sleepHoursCycle: 7,
-        moodScore: 7,
+        painLevel: lastPain,
+        stressScoreCycle: lastStress,
+        sleepHoursCycle: lastSleep,
+        moodScore: lastMood,
       );
 
       if (result['success'] && mounted) {
+        await _resetPredictionOffset();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Haid dikonfirmasi! Data siklus diperbarui.'), backgroundColor: Colors.green),
         );
@@ -512,12 +490,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   }
 
   // ========== POPUP KONFIRMASI HARIAN ==========
-  // "Ya" -> buka date picker (rentang: tanggal prediksi s/d hari ini) agar user
-  // bisa memilih tanggal pasti mulai haidnya, bukan otomatis pakai tanggal prediksi.
-  // "Belum" -> geser prediksi (lihat _shiftPredictionForward).
   Future<void> _showPredictionDialog(DateTime predictedDate) async {
     if (!mounted) return;
-    
+
     final action = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -622,7 +597,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   // ========== BOTTOM SHEET INFO TANGGAL ==========
   void _showDateInfoSheet(DateTime date) {
     if (!mounted) return;
-    
+
     final event = _calendarEvents[DateTime(date.year, date.month, date.day)];
     bool hasNote = _hasNoteDates[date] == true;
     String formattedDate = DateFormat('EEEE, dd MMMM yyyy', 'id').format(date);
@@ -698,7 +673,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
             ),
             const SizedBox(height: 20),
 
-            if (event?.type == CalendarEventType.prediction)
+            if (event?.type == CalendarEventType.prediction &&
+                !date.isAfter(_dateOnly(DateTime.now())))
               Column(
                 children: [
                   SizedBox(
@@ -706,7 +682,10 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
-                        _confirmPeriodStart(date);
+                        // Gunakan mounted di dalam onPressed untuk safety
+                        if (mounted) {
+                          _confirmPeriodStart(date);
+                        }
                       },
                       icon: const Icon(Icons.check_circle),
                       label: const Text('Ya, Saya Haid'),
@@ -722,7 +701,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
-                        _shiftPredictionForward();
+                        if (mounted) {
+                          _shiftPredictionForward();
+                        }
                       },
                       icon: const Icon(Icons.arrow_forward),
                       label: const Text('Belum, Geser Prediksi'),
@@ -733,6 +714,14 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                     ),
                   ),
                 ],
+              )
+            else if (event?.type == CalendarEventType.prediction)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Tanggal ini masih perkiraan di masa depan. Konfirmasi baru bisa dilakukan setelah tanggalnya tiba.',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
               ),
 
             const SizedBox(height: 10),
@@ -779,7 +768,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
           setState(() => _currentIndex = index);
-          // Refresh data saat kembali ke tab Beranda
           if (index == 0) {
             _loadCycleData();
           }
@@ -997,7 +985,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     final month = _selectedDate.month;
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
-    int startOffset = firstDay.weekday - 2;
+    int startOffset = firstDay.weekday - 1;
     if (startOffset < 0) startOffset += 7;
     const totalCells = 42;
     List<DateTime?> days = List.filled(totalCells, null);
@@ -1033,8 +1021,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     Color? bgColor;
     Color textColor = Colors.black87;
 
-    // "Hari ini" selalu hijau, menimpa warna lain (termasuk merah kalau
-    // hari ini kebetulan termasuk hari haid yang sudah terkonfirmasi).
     if (isToday) {
       bgColor = Colors.green;
       textColor = Colors.white;
